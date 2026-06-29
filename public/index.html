@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>РНП · Рука на пульсе</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="top">
+  <div class="top-left">
+    <span class="logo">📡</span>
+    <b style="font-size:15px;font-weight:800">РНП · Рука на пульсе</b>
+    <span class="pulse"></span>
+  </div>
+  <div class="top-right">
+    <div class="month-nav">
+      <button class="mnav-btn" onclick="App.shiftMonth(-1)" title="Предыдущий месяц">‹</button>
+      <input type="month" id="month" onchange="App.render()" style="width:150px">
+      <button class="mnav-btn" onclick="App.shiftMonth(1)" title="Следующий месяц">›</button>
+    </div>
+    <button class="btn sm" onclick="App.openDay()">＋ День</button>
+    <button class="btn sm ghost" onclick="App.downloadTemplate()" title="Скачать CSV-шаблон">📋</button>
+    <button class="btn sm ghost" onclick="App.importCsv()" title="Импортировать CSV">📥</button>
+    <button class="btn sm ghost" onclick="App.archiveMonth()" title="Сохранить архив текущего месяца">💾 Архив</button>
+    <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="App.handleCsvFile(this)">
+    <button class="themebtn" id="themeBtn" onclick="App.theme()">🌙</button>
+  </div>
+</div>
+
+
+<div class="wrap">
+
+<!-- ===== РНП ===== -->
+<div class="page active" id="p-rnp">
+  <div id="rnpBlocks"></div>
+  <div class="empty" id="rnpEmpty" style="display:none">
+    Добавь товары во вкладке «🏷 Товары и план», затем нажми «＋ Добавить день» для ввода данных.
+  </div>
+</div>
+
+<!-- ===== ТОВАРЫ И ПЛАН ===== -->
+<div class="page" id="p-products">
+
+  <!-- Секция: Товары -->
+  <div class="pr-section">
+    <div class="pr-sec-hd">
+      <span>🏷 Товары и себестоимость</span>
+      <button class="btn" onclick="App.addProduct()">＋ Добавить товар</button>
+    </div>
+    <div class="scroll">
+      <table class="pr-table">
+        <thead><tr>
+          <th style="width:30px"></th>
+          <th class="l" style="min-width:120px">Название <span class="tip" data-tip="Название товара для отображения в таблице РНП">?</span></th>
+          <th class="l" style="min-width:100px">SKU <span class="tip" data-tip="Твой артикул/SKU — именно он используется при вводе данных. Должен точно совпадать с CSV">?</span></th>
+          <th class="l" style="min-width:90px">Арт. WB <span class="tip" data-tip="Числовой артикул (nmId) на Wildberries. Можно найти в кабинете WB в разделе Товары">?</span></th>
+          <th style="min-width:80px">Цена ₽ <span class="tip" data-tip="Текущая цена продажи на WB без СПП скидки. Используется для расчёта финансовых показателей">?</span></th>
+          <th style="min-width:85px">Себест ₽ <span class="tip" data-tip="Себестоимость единицы товара без упаковки. Включай все затраты: закупка, доставка до склада, таможня">?</span></th>
+          <th style="min-width:70px">Упак ₽ <span class="tip" data-tip="Стоимость упаковки на единицу: пакет, коробка, стикеры WB, ярлыки. Считается отдельно от себест.">?</span></th>
+          <th style="min-width:90px">Лог. ед ₽ <span class="tip" data-tip="Логистика WB за единицу товара по тарифам WB. Зависит от объёма/веса и категории. При возврате платишь ещё раз!">?</span></th>
+          <th style="min-width:75px">Комис % <span class="tip" data-tip="Комиссия WB в % от цены продажи. Зависит от категории и схемы (FBO/FBS). Смотри в кабинете WB → Финансы → Комиссии">?</span></th>
+          <th style="min-width:70px">Выкуп % <span class="tip" data-tip="Ожидаемый процент выкупа для планирования. Влияет на расчёт плана продаж. Фактический выкуп смотри в таблице РНП">?</span></th>
+          <th style="min-width:70px">Цел.ДРР % <span class="tip" data-tip="Целевая доля рекламных расходов (ДРР). Если фактический ДРР превысит это значение — показатель в шапке товара станет красным">?</span></th>
+          <th style="min-width:110px">Ответственный <span class="tip" data-tip="Менеджер товара. Отображается в шапке блока в таблице РНП">?</span></th>
+          <th style="min-width:120px">Статус <span class="tip" data-tip="Локомотив — основной продавец. Рост — растущий товар. Аутсайдер — проблемный. Новинка — недавно запущен">?</span></th>
+        </tr></thead>
+        <tbody id="prRows"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="prEmpty" style="display:none">Нет товаров. Нажми «＋ Добавить товар»</div>
+  </div>
+
+  <!-- Секция: План -->
+  <div class="pr-section">
+    <div class="pr-sec-hd">
+      <span>📅 План на месяц: <b id="prMonth">—</b></span>
+      <small style="color:var(--muted)">Заказы шт · Заказы ₽ · Продажи шт</small>
+    </div>
+    <div class="scroll">
+      <table class="pr-table">
+        <thead><tr>
+          <th class="l" style="min-width:150px">Товар</th>
+          <th style="min-width:110px">План заказы, шт <span class="tip" data-tip="Плановое количество заказов за месяц. Ставь реалистичный план с ростом 10-20% к прошлому месяцу">?</span></th>
+          <th style="min-width:120px">План заказы, ₽ <span class="tip" data-tip="Плановая сумма заказов = план шт × средний чек. Средний чек смотри в таблице РНП">?</span></th>
+          <th style="min-width:110px">План продажи, шт <span class="tip" data-tip="Плановые выкупы = план заказов × прогнозируемый % выкупа. Если выкуп обычно 75% — ставь план_заказов × 0.75">?</span></th>
+          <th style="min-width:120px">Факт заказы, шт <span class="tip" data-tip="Фактическое количество заказов за текущий месяц (из внесённых данных)">?</span></th>
+          <th style="min-width:120px">Факт заказы, ₽ <span class="tip" data-tip="Фактическая сумма заказов за текущий месяц">?</span></th>
+          <th style="min-width:100px">Выпол. заказы <span class="tip" data-tip="Процент выполнения плана заказов. 🟢 ≥100%, 🟡 70-99%, 🔴 &lt;70%">?</span></th>
+          <th style="min-width:120px">Факт продажи, шт <span class="tip" data-tip="Фактические выкупы за месяц. Отстаёт от заказов на 5-14 дней (время доставки и выкупа)">?</span></th>
+          <th style="min-width:100px">Выпол. продажи <span class="tip" data-tip="Процент выполнения плана продаж (выкупов). 🟢 ≥100%, 🟡 70-99%, 🔴 &lt;70%">?</span></th>
+        </tr></thead>
+        <tbody id="planRows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Секция: Юнит-экономика -->
+  <div class="pr-section">
+    <div class="pr-sec-hd"><span>🧮 Юнит-экономика (расчёт на 1 шт)</span></div>
+    <div class="scroll"><table class="pr-table">
+      <thead><tr>
+        <th class="l" style="min-width:150px">Товар</th>
+        <th>Цена ₽</th><th>Себест ₽</th>
+        <th>К.Перечисл ₽</th><th>Прибыль/шт ₽</th><th>Маржа %</th>
+        <th style="min-width:100px">Тест цены ₽</th><th>Прибыль (тест)</th><th>Маржа (тест)</th>
+      </tr></thead>
+      <tbody id="unitRows"></tbody>
+    </table></div>
+  </div>
+
+</div>
+
+<!-- ===== НАСТРОЙКИ ===== -->
+<div class="page" id="p-settings">
+  <div class="card" style="max-width:600px">
+    <div class="hd">🔌 Wildberries API</div>
+    <div style="padding:18px;display:flex;flex-direction:column;gap:14px">
+      <div class="fld"><label>API-ключ WB <span class="tip" data-tip="Получи в кабинете WB: иконка профиля → Настройки → Доступ к API → создай токен с правами «Статистика». Токен начинается с eyJ...">?</span></label><input type="password" id="apiKey" placeholder="eyJ..."></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <label style="font-size:12px;color:var(--muted)">Грузить с:</label>
+        <input type="date" id="dateFrom" style="padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg2);color:var(--ink);font-family:inherit">
+        <button class="btn sm ghost" onclick="App.wbTest()">🔍 Тест связи</button>
+        <button class="btn sm" onclick="App.wbSync()">⬇ Загрузить данные</button>
+      </div>
+      <div id="wbMsg" style="font-size:13px"></div>
+    </div>
+  </div>
+  <div class="card" style="max-width:600px">
+    <div class="hd">⚙️ Общие</div>
+    <div style="padding:18px;display:flex;gap:14px;flex-wrap:wrap">
+      <div class="fld"><label>Налог % <span class="tip" data-tip="УСН 6% → вводи 6. УСН доходы-расходы 15% → вводи 15. ОСНО → вводи 20. Налог считается от суммы «К перечислению»">?</span></label><input type="number" id="taxRate" style="width:100px"></div>
+      <div class="fld"><label>Курс USD ₽ <span class="tip" data-tip="Актуальный курс доллара. Используется для отображения «К перечислению» в долларах в шапке каждого товара. Обновляй раз в неделю">?</span></label><input type="number" id="usdRate" style="width:100px"></div>
+    </div>
+    <div style="padding:0 18px 18px"><button class="btn" onclick="App.saveSettings()">💾 Сохранить</button></div>
+  </div>
+  <div class="card" style="max-width:600px">
+    <div class="hd">👁 Видимость строк таблицы</div>
+    <div style="padding:14px 18px">
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Снимите галочку чтобы скрыть секцию или строку из таблицы РНП</p>
+      <div id="visRows" style="display:flex;flex-direction:column;gap:7px"></div>
+    </div>
+  </div>
+  <div class="card" style="max-width:600px">
+    <div class="hd">📜 Лог</div>
+    <div id="logBox" style="padding:14px 18px;font-size:12px;color:var(--muted);max-height:200px;overflow:auto"></div>
+  </div>
+</div>
+
+<!-- ===== ИНСТРУКЦИЯ ===== -->
+<div class="page" id="p-help">
+  <div class="help-wrap">
+
+    <!-- Hero -->
+    <div class="h-hero">
+      <div class="h-hero-left">
+        <div class="h-hero-icon">📡</div>
+        <div>
+          <div class="h-hero-title">РНП · Рука на пульсе</div>
+          <div class="h-hero-sub">Система аналитики Wildberries — полная инструкция</div>
+        </div>
+      </div>
+      <div class="h-hero-stats">
+        <div class="h-stat"><span class="h-stat-n">8</span><span class="h-stat-l">разделов</span></div>
+        <div class="h-stat"><span class="h-stat-n">100+</span><span class="h-stat-l">советов</span></div>
+        <div class="h-stat"><span class="h-stat-n">17</span><span class="h-stat-l">формул</span></div>
+      </div>
+    </div>
+
+    <!-- Quick actions -->
+    <div class="h-quick">
+      <button class="h-qbtn" onclick="App.switchTo('rnp')">📊 Перейти в РНП</button>
+      <button class="h-qbtn" onclick="App.switchTo('products')">🏷 Добавить товар</button>
+      <button class="h-qbtn" onclick="App.openDay()">＋ Внести день</button>
+      <button class="h-qbtn" onclick="App.downloadTemplate()">📋 Скачать шаблон</button>
+      <button class="h-qbtn" onclick="App.switchTo('settings')">⚙️ Настройки</button>
+    </div>
+
+    <!-- Sticky nav -->
+    <nav class="h-nav" id="hNav">
+      <a class="h-nav-a active" href="#hs-start" onclick="hScroll(this,'hs-start')">🚀 Старт</a>
+      <a class="h-nav-a" href="#hs-table" onclick="hScroll(this,'hs-table')">📊 Таблица</a>
+      <a class="h-nav-a" href="#hs-orders" onclick="hScroll(this,'hs-orders')">🟢 Заказы</a>
+      <a class="h-nav-a" href="#hs-funnel" onclick="hScroll(this,'hs-funnel')">🔵 Воронка</a>
+      <a class="h-nav-a" href="#hs-ads" onclick="hScroll(this,'hs-ads')">🟠 Реклама</a>
+      <a class="h-nav-a" href="#hs-fin" onclick="hScroll(this,'hs-fin')">🔴 Финансы</a>
+      <a class="h-nav-a" href="#hs-formulas" onclick="hScroll(this,'hs-formulas')">🧮 Формулы</a>
+      <a class="h-nav-a" href="#hs-data" onclick="hScroll(this,'hs-data')">📁 Данные</a>
+      <a class="h-nav-a" href="#hs-norms" onclick="hScroll(this,'hs-norms')">📏 Нормы</a>
+    </nav>
+
+<div class="help-grid2">
+
+<!-- БЫСТРЫЙ СТАРТ -->
+<div class="card help acc-card" id="hs-start"><div class="hd acc-hd" onclick="hToggle(this)"><span>🚀 Быстрый старт — с нуля до работы за 10 минут</span><span class="acc-arr">▼</span></div><div class="hbody acc-body">
+  <!-- Шаги-пилюли -->
+  <div class="qs-track">
+    <div class="qs-step done">1<span>Товары</span></div>
+    <div class="qs-line"></div>
+    <div class="qs-step done">2<span>Параметры</span></div>
+    <div class="qs-line"></div>
+    <div class="qs-step">3<span>План</span></div>
+    <div class="qs-line"></div>
+    <div class="qs-step">4<span>Данные</span></div>
+    <div class="qs-line"></div>
+    <div class="qs-step">5<span>Анализ</span></div>
+  </div>
+  <div class="step"><span class="n">1</span><div><b>Открой вкладку «🏷 Товары и план»</b> — это первый шаг. Без товаров таблица РНП остаётся пустой.</div></div>
+  <div class="step"><span class="n">2</span><div><b>Нажми «＋ Добавить товар»</b> — введи название (для отображения), SKU-артикул (твой внутренний код), артикул WB (nmId — числовой, из кабинета WB).</div></div>
+  <div class="step"><span class="n">3</span><div><b>SKU — ключевое поле.</b> Именно по нему связываются данные за дни с товаром. Должен совпадать при ручном вводе и CSV-импорте. Регистр важен!</div></div>
+  <div class="step"><span class="n">4</span><div><b>Заполни финансовые параметры</b> прямо в таблице товаров: цена продажи ₽, себестоимость ₽/шт, упаковка ₽/шт, логистика WB ₽/шт, комиссия WB %, ожидаемый выкуп %.</div></div>
+  <div class="step"><span class="n">5</span><div><b>Комиссию WB</b> смотри в кабинете: Финансы → Комиссии → выбери категорию. Разная для FBO и FBS. Вводи актуальное значение в % без знака %.</div></div>
+  <div class="step"><span class="n">6</span><div><b>Логистику WB</b> найди в тарифах WB по весу/объёму товара. При возврате — платишь дважды (туда + обратно). Это критически важно для юнит-экономики.</div></div>
+  <div class="step"><span class="n">7</span><div><b>Установи Цел.ДРР %</b> — целевая доля рекламных расходов. Если фактический ДРР в таблице превысит это значение, показатель в шапке товара загорится красным.</div></div>
+  <div class="step"><span class="n">8</span><div><b>Укажи статус товара:</b> Локомотив (главный продавец), Рост (растущий), Аутсайдер (проблемный), Новинка (только запущен). Помогает при расстановке приоритетов.</div></div>
+  <div class="step"><span class="n">9</span><div><b>Поставь план на месяц</b> — секция «📅 План на месяц»: заказы (шт), заказы (₽), продажи (шт). Без плана строки «Выпол.плана» остаются пустыми.</div></div>
+  <div class="step"><span class="n">10</span><div><b>Как ставить план:</b> возьми прошлый месяц × 1.1–1.2 (рост 10–20%). Слишком амбициозный план демотивирует команду; слишком лёгкий — не даёт развития.</div></div>
+  <div class="step"><span class="n">11</span><div><b>Настрой налог</b> — вкладка «⚙️ Настройки» → поле «Налог %». УСН 6% → вводи 6. УСН 15% → 15. ОСНО → 20. Налог считается от суммы «К перечислению».</div></div>
+  <div class="step"><span class="n">12</span><div><b>Укажи курс USD</b> в настройках — для отображения суммы перечисления в долларах в шапке каждого товара. Обновляй раз в неделю.</div></div>
+  <div class="step"><span class="n">13</span><div><b>Подключи API WB</b> — «⚙️ Настройки» → вставь токен → «🔍 Тест связи». Токен из кабинета WB: профиль → Настройки → Доступ к API → создай токен с правами «Статистика».</div></div>
+  <div class="step"><span class="n">14</span><div><b>Загрузи данные через API</b> — выбери дату начала и нажми «⬇ Загрузить данные». Автоматически появятся заказы, выкупы, остатки по всем SKU.</div></div>
+  <div class="step"><span class="n">15</span><div><b>Вноси данные вручную</b> — кнопка «＋ День» (в шапке или внутри блока товара). Открывается форма: дата, товар, все метрики за день.</div></div>
+  <div class="step"><span class="n">16</span><div><b>Что вносить вручную:</b> показы, клики, корзину, расход рекламы, СПП %. Эти данные API не передаёт — только из рекламного кабинета WB.</div></div>
+  <div class="step"><span class="n">17</span><div><b>CSV-импорт</b> — скачай шаблон (📋), заполни в Excel/Sheets, загрузи (📥). Удобно для массового ввода данных за несколько дней сразу.</div></div>
+  <div class="step"><span class="n">18</span><div><b>Переключай месяцы</b> кнопками ‹ › или выбором из пикера. Все месяцы хранятся в одной базе — переключение мгновенное, данные не теряются.</div></div>
+  <div class="step"><span class="n">19</span><div><b>Архивируй месяц</b> в конце периода — кнопка «💾 Архив» сохраняет полный снэпшот (данные + товары + план) в data/archive/ГГГГ-ММ.json.</div></div>
+  <div class="step"><span class="n">20</span><div><b>Настрой видимость строк</b> — «⚙️ Настройки» → «👁 Видимость строк». Скрой неиспользуемые секции или строки (Раздачи, СПП, план и т.д.) для чистоты таблицы.</div></div>
+</div></div>
+
+<!-- СТРУКТУРА ТАБЛИЦЫ -->
+<div class="card help acc-card" id="hs-table"><div class="hd acc-hd" onclick="hToggle(this)"><span>📊 Как читать таблицу РНП</span><span class="acc-arr">▼</span></div><div class="hbody acc-body">
+  <div class="step"><span class="n">1</span><div><b>Каждый товар = отдельный блок.</b> Вверху — тёмная шапка с итоговыми KPI за выбранный месяц. Ниже — цветная таблица метрик по неделям и дням.</div></div>
+  <div class="step"><span class="n">2</span><div><b>Шапка товара (тёмный блок)</b> содержит: Рентаб., К перечислению (₽ и $), ДРР%, Маржа%, Прибыль, CTR%, Клики, Выкуп%, Цена, Остаток, Статус, Себест, Комиссия и др.</div></div>
+  <div class="step"><span class="n">3</span><div><b>Цвета в шапке:</b> зелёный = показатель в норме, красный = проблема. ДРР: красный если выше целевого. Прибыль/Маржа: красные если отрицательные.</div></div>
+  <div class="step"><span class="n">4</span><div><b>Строки таблицы = метрики.</b> Сгруппированы по цвету секций: 🟢 Заказы, 🔵 Воронка общая, 🩵 Воронка рекламы, 🟠 Расходы РК, 🔴 Финансы.</div></div>
+  <div class="step"><span class="n">5</span><div><b>Колонка «Тренд»</b> — мини-спарклайн (линейный график) за весь месяц. Зелёный = рост к началу месяца, красный = падение. Позволяет оценить динамику за секунду.</div></div>
+  <div class="step"><span class="n">6</span><div><b>«СР.Знач»</b> — среднее значение за дни, в которые были данные (не за все 30 дней). Умножь на количество оставшихся дней = прогноз на конец месяца.</div></div>
+  <div class="step"><span class="n">7</span><div><b>«Нед.1» — «Нед.5»</b> — итоги по неделям месяца. Первая неделя может быть неполной (если месяц начался не с понедельника). Удобно для понедельного сравнения.</div></div>
+  <div class="step"><span class="n">8</span><div><b>«ИТОГ»</b> — суммарный результат за весь месяц. Выделен тёмно-синим, жирный. Для % метрик (CTR, маржа) — рассчитывается как среднее, не сумма.</div></div>
+  <div class="step"><span class="n">9</span><div><b>Колонки с днями (Пн 01, Вт 02...)</b> — данные за каждый день. Видно день недели и число. Сегодняшний день выделен зелёным заголовком.</div></div>
+  <div class="step"><span class="n">10</span><div><b>Прокрутка таблицы:</b> горизонтальный скролл для просмотра 30–31 дней. Колонка «Показатель» и «Тренд» зафиксированы слева — всегда видно, какая строка перед тобой.</div></div>
+  <div class="step"><span class="n">11</span><div><b>Строки плана (курсив)</b> — план и % выполнения под строками «ЗАКАЗЫ, шт» и «Продажи, шт». Цвет: 🟢 ≥100%, 🟡 70–99%, 🔴 &lt;70%.</div></div>
+  <div class="step"><span class="n">12</span><div><b>Пустые ячейки (—)</b> — данных нет или значение равно нулю. Нормально для будущих дней, для метрик без данных, для товаров без рекламы.</div></div>
+  <div class="step"><span class="n">13</span><div><b>Знаки ? (вопросики)</b> — тултипы с пояснением. Наведи мышью на любой ? чтобы увидеть определение, формулу и норматив для этого показателя.</div></div>
+  <div class="step"><span class="n">14</span><div><b>Кнопка «＋ День»</b> в шапке каждого блока — открывает форму ввода с предзаполненным SKU этого товара. Удобнее, чем общая кнопка сверху.</div></div>
+  <div class="step"><span class="n">15</span><div><b>Кнопка «✏️ Товар»</b> — быстрое редактирование параметров товара (себестоимость, комиссия, цена и т.д.) прямо из таблицы РНП, без переключения вкладок.</div></div>
+</div></div>
+
+<!-- ЗАКАЗЫ -->
+<div class="card help acc-card sec-green" id="hs-orders"><div class="hd acc-hd" onclick="hToggle(this)"><span>🟢 Секция ЗАКАЗЫ — разбор каждой строки</span><span class="acc-arr">▼</span></div><div class="hbody acc-body">
+  <div class="step"><span class="n">1</span><div><b>ЗАКАЗЫ, шт</b> — количество оформленных покупателями заказов. Заказ ≠ деньги: покупатель ещё может отказаться на ПВЗ или оформить возврат.</div></div>
+  <div class="step"><span class="n">2</span><div><b>Когда появляются заказы:</b> обычно в тот же день (вечером) или на следующий день в кабинете WB. Задержка до 24 часов — норма.</div></div>
+  <div class="step"><span class="n">3</span><div><b>СПП % (скидка постоянного покупателя)</b> — WB субсидирует часть скидки, часть берётся из маржи продавца. При СПП &gt;30% обязательно пересчитай юнит-экономику.</div></div>
+  <div class="step"><span class="n">4</span><div><b>Как влияет СПП:</b> При цене 1000₽ и СПП 20% покупатель платит 800₽, WB перечисляет тебе ~800₽ минус комиссия. СПП снижает реальную цену продажи.</div></div>
+  <div class="step"><span class="n">5</span><div><b>Продажи (выкупы), шт</b> — товары, которые покупатель забрал и не вернул. Именно по выкупам WB начисляет деньги на еженедельных выплатах.</div></div>
+  <div class="step"><span class="n">6</span><div><b>Задержка выкупов:</b> выкупы появляются через 5–14 дней после заказа (время доставки + хранение на ПВЗ). Поэтому план продаж всегда «отстаёт» от плана заказов.</div></div>
+  <div class="step"><span class="n">7</span><div><b>СР. Чек ₽</b> = Сумма заказов ÷ Кол-во заказов. Снижение чека — сигнал: участие в акции WB, рост доли СПП, снижение цены конкурентами.</div></div>
+  <div class="step"><span class="n">8</span><div><b>Раздачи, шт</b> — товары блогерам/инфлюенсерам. Не считаются выкупами, но увеличивают скорость набора отзывов. Учитывай как маркетинговый расход.</div></div>
+  <div class="step"><span class="n">9</span><div><b>Выпол. плана ЗАКАЗЫ %</b> — показывает прогресс по неделям. Смотри: Нед.1 — норма 20–25%, Нед.2 — 45–50%, Нед.3 — 70–75%, Нед.4 — 90–100%.</div></div>
+  <div class="step"><span class="n">10</span><div><b>Если план горит на 2-й неделе (&lt;40%):</b> запусти акцию, пополни ставки в рекламе, сделай распродажу или подключи дополнительный трафик.</div></div>
+  <div class="step"><span class="n">11</span><div><b>Выпол. плана ПРОДАЖИ %</b> — часто ниже плана заказов на 10–20% из-за задержки выкупов. Оценивать нужно с учётом этого лага.</div></div>
+  <div class="step"><span class="n">12</span><div><b>Сумма Заказов ₽</b> — общая выручка по всем заказам месяца. Не равна деньгам на счёте: WB вычтет комиссию (~15–25%), логистику, штрафы и хранение.</div></div>
+  <div class="step"><span class="n">13</span><div><b>Сумма Продаж ₽</b> — выручка по фактически выкупленным товарам. Это база для расчёта ДРР, маржи и суммы к перечислению.</div></div>
+  <div class="step"><span class="n">14</span><div><b>Разница Заказы − Продажи = потери</b>: это невыкупленные товары. За них ты платишь логистику туда и обратно, ничего не получая взамен.</div></div>
+  <div class="step"><span class="n">15</span><div><b>Как улучшить выкуп:</b> точные размерные сетки, реальные фото (без фотошопа), точные описания, отсутствие «накрученных» отзывов — всё это снижает разочарование и возвраты.</div></div>
+</div></div>
+
+<!-- ВОРОНКА -->
+<div class="card help acc-card sec-blue" id="hs-funnel"><div class="hd acc-hd" onclick="hToggle(this)"><span>🔵 Секция ВОРОНКА — трафик и конверсии</span><span class="acc-arr">▼</span></div><div class="hbody acc-body">
+  <!-- Визуальная воронка -->
+  <div class="h-funnel">
+    <div class="h-fn-step"><div class="h-fn-box" style="--fw:100%;--fc:#5c6bc0">👁 Показы<small>100%</small></div><div class="h-fn-arr">▼ CTR 2-5%</div></div>
+    <div class="h-fn-step"><div class="h-fn-box" style="--fw:50%;--fc:#42a5f5">🖱 Клики<small>~50%</small></div><div class="h-fn-arr">▼ Корзина 5-15%</div></div>
+    <div class="h-fn-step"><div class="h-fn-box" style="--fw:28%;--fc:#26c6da">🛒 Корзина<small>~28%</small></div><div class="h-fn-arr">▼ Заказы 2-8%</div></div>
+    <div class="h-fn-step"><div class="h-fn-box" style="--fw:16%;--fc:#66bb6a">📦 Заказы<small>~16%</small></div><div class="h-fn-arr">▼ Выкуп 70-85%</div></div>
+    <div class="h-fn-step"><div class="h-fn-box" style="--fw:10%;--fc:#43a047">✅ Выкупы<small>~10%</small></div></div>
+  </div>
+  <div class="step"><span class="n">1</span><div><b>Воронка WB:</b> Показы → Клики (CTR) → Корзина → Заказы → Выкупы. Каждый шаг — конверсия. Анализируй где самый большой «провал».</div></div>
+  <div class="step"><span class="n">2</span><div><b>Показы</b> — сколько раз карточка появилась в поиске/каталоге/баннерах. Источник трафика. Рост показов ≠ рост продаж, если CTR низкий.</div></div>
+  <div class="step"><span class="n">3</span><div><b>Мало показов?</b> — SEO: добавь релевантные ключи в название, описание, характеристики. Участвуй в акциях WB — они дают буст в выдаче.</div></div>
+  <div class="step"><span class="n">4</span><div><b>Клики (органика)</b> — переходы в карточку без рекламы. Зависят от позиции в поиске и главного фото.</div></div>
+  <div class="step"><span class="n">5</span><div><b>CTR % = Клики ÷ Показы × 100.</b> Нормы: &lt;1% — проблема с фото, 1–3% — средне, 3–5% — хорошо, &gt;5% — отлично. Это главный показатель главного фото.</div></div>
+  <div class="step"><span class="n">6</span><div><b>Как улучшить CTR:</b> A/B тест фото каждые 2–4 недели, инфографика с главным преимуществом на фото, тест с видео-обложкой, яркий контрастный фон.</div></div>
+  <div class="step"><span class="n">7</span><div><b>% органики кликов</b> = (Клики − Клики РК) ÷ Клики × 100. Показывает долю бесплатного трафика. Цель — держать выше 60%. Чем выше — тем лучше SEO.</div></div>
+  <div class="step"><span class="n">8</span><div><b>Если органика падает</b> — WB понизил позицию (отзывы, рейтинг, продажи). Нужно поднять активность: акции, реклама, работа с отзывами.</div></div>
+  <div class="step"><span class="n">9</span><div><b>Корзина, шт</b> — добавлений в корзину. Промежуточный шаг воронки. Много корзин, мало заказов = проблема с ценой, рейтингом или описанием.</div></div>
+  <div class="step"><span class="n">10</span><div><b>Корзина % = Корзина ÷ Клики × 100.</b> Норма: 5–15%. Ниже 5% — покупатель приходит, смотрит и уходит. Выше 20% — отличная карточка.</div></div>
+  <div class="step"><span class="n">11</span><div><b>Низкая Корзина%?</b> — Проверь: цена конкурентна? Фото все 30 штук заполнены? Есть отзывы с фото? Описание раскрывает выгоды (не характеристики)?</div></div>
+  <div class="step"><span class="n">12</span><div><b>Заказы % = Заказы ÷ Клики × 100.</b> Итоговая конверсия карточки. Норма: 2–8%. Продукты питания: 5–10%, одежда: 2–5%, электроника: 1–3%.</div></div>
+  <div class="step"><span class="n">13</span><div><b>CRO % = Заказы ÷ Показы × 100.</b> Сводная метрика от показа до заказа. Показывает насколько эффективна карточка в целом — и SEO, и контент.</div></div>
+  <div class="step"><span class="n">14</span><div><b>Анализируй воронку последовательно:</b> сначала показы → CTR → корзина% → заказы%. Найди «узкое место» и работай только с ним — это даст максимальный эффект.</div></div>
+  <div class="step"><span class="n">15</span><div><b>Сравнивай недели между собой</b> — если на Нед.2 CTR вырос, значит смена фото сработала. Если упал — верни предыдущее. Делай выводы на данных, не на ощущениях.</div></div>
+</div></div>
+
+<!-- РЕКЛАМА -->
+<div class="card help acc-card sec-orange" id="hs-ads"><div class="hd acc-hd" onclick="hToggle(this)"><span>🟠 Секция РЕКЛАМА — управление ДРР</span><span class="acc-arr">▼</span></div><div class="hbody acc-body">
+  <div class="step"><span class="n">1</span><div><b>Секция «Воронка Рекламы»</b> — метрики платного трафика WB. Отдельно от органики, чтобы видеть эффективность каждого канала.</div></div>
+  <div class="step"><span class="n">2</span><div><b>Показы с РК</b> — показы через платные кампании. Если РК даёт &gt;80% всех показов — ты зависишь от рекламы, органическое SEO нужно усиливать.</div></div>
+  <div class="step"><span class="n">3</span><div><b>Клики РК</b> — платный трафик. Должен конвертироваться в заказы лучше органики — ты за него платишь. Если хуже — реклама нецелевая.</div></div>
+  <div class="step"><span class="n">4</span><div><b>CTR % РК = Клики РК ÷ Показы РК × 100.</b> Норма WB рекламы: 0.3–1.5%. Ниже 0.3% — объявление нерелевантно, меняй ключи или фото.</div></div>
+  <div class="step"><span class="n">5</span><div><b>CRO РК %</b> — конверсия рекламного трафика в заказы. Сравни с органическим CRO. Если рекламный ниже органического — аудитория нецелевая.</div></div>
+  <div class="step"><span class="n">6</span><div><b>CPC (стоимость клика) = Расход РК ÷ Клики РК.</b> Максимально допустимый: Прибыль с заказа × Конверсия в заказ. Выше — реклама в минус.</div></div>
+  <div class="step"><span class="n">7</span><div><b>Пример расчёта макс. CPC:</b> прибыль 500₽/шт, конверсия 4% → макс. CPC = 500 × 0.04 = 20₽. Если CPC = 30₽ — каждый заказ с рекламы убыточен.</div></div>
+  <div class="step"><span class="n">8</span><div><b>Расход РК ₽</b> — вноси ежедневно из рекламного кабинета WB. Либо подключи API (рекламный кабинет WB имеет отдельный API). Точность ДРР зависит от этих данных.</div></div>
+  <div class="step"><span class="n">9</span><div><b>ДРР % = Расход РК ÷ Выкупы ₽ × 100.</b> Главная метрика рекламы. Показывает сколько копеек тратишь на рекламу с каждого рубля выкупленных продаж.</div></div>
+  <div class="step"><span class="n">10</span><div><b>Ориентиры ДРР по нишам:</b> Одежда/обувь 15–25%, Электроника 5–12%, Дом/сад 10–20%, Красота/здоровье 12–22%, Продукты 5–15%, Детские товары 8–18%.</div></div>
+  <div class="step"><span class="n">11</span><div><b>ДРР и маржа связаны:</b> реальная прибыльность = Маржа − ДРР. Маржа 28%, ДРР 25% = зарабатываешь 3 копейки с рубля продаж. Маржа &lt; ДРР = убыток.</div></div>
+  <div class="step"><span class="n">12</span><div><b>ДРР выше нормы?</b> — Снижай ставки на 10–15%, отключай неэффективные кампании, тестируй другие типы рекламы WB (каталог, баннеры, поиск).</div></div>
+  <div class="step"><span class="n">13</span><div><b>Целевой ДРР в карточке товара</b> — поле «Цел.ДРР %». Если факт превысит его — в шапке товара ДРР загорится красным. Это сигнал к действию.</div></div>
+  <div class="step"><span class="n">14</span><div><b>Следи за ДРР еженедельно</b> — не жди конца месяца. Если к концу 2-й недели ДРР выше нормы на 20%+ — срочно корректируй рекламу.</div></div>
+  <div class="step"><span class="n">15</span><div><b>Лучший ДРР ≠ 0.</b> Отсутствие рекламы при низкой органике = падение показов = падение продаж. Цель — найти «золотое соотношение» ДРР и объёма продаж.</div></div>
+</div></div>
+
+<!-- ФИНАНСЫ -->
+<div class="card help acc-card sec-red" id="hs-fin"><div class="hd acc-hd" onclick="hToggle(this)"><span>🔴 Секция ФИНАНСЫ — деньги и прибыль</span><span class="acc-arr">▼</span></div><div class="hbody acc-body">
+  <div class="step"><span class="n">1</span><div><b>К перечислению ₽</b> = Выкупы ₽ − (Цена × Комис%) × кол-во − Логист × кол-во. Это сумма, которую WB переведёт на твой расчётный счёт.</div></div>
+  <div class="step"><span class="n">2</span><div><b>Когда перечисляет WB:</b> раз в неделю (по средам или пятницам, зависит от тарифа). Суммы из кабинета WB → Финансы → Еженедельные выплаты.</div></div>
+  <div class="step"><span class="n">3</span><div><b>Прибыль ₽</b> = К перечислению − Себестоимость × кол-во − Упаковка × кол-во − Налог − Расход РК. Это чистая прибыль в кармане после всех вычетов.</div></div>
+  <div class="step"><span class="n">4</span><div><b>Прибыль отрицательная?</b> — Проверь цепочку: цена достаточна? Себестоимость не завышена? Логистика учтена правильно? Комиссия актуальная? ДРР в норме?</div></div>
+  <div class="step"><span class="n">5</span><div><b>Маржа %</b> = Прибыль ÷ Выкупы ₽ × 100. Нормы: &lt;10% — опасно (нет запаса), 10–20% — удовл., 20–35% — хорошо, &gt;35% — отлично.</div></div>
+  <div class="step"><span class="n">6</span><div><b>Рентабельность %</b> = Прибыль ÷ Себестоимость × 100. Отдача на вложенные деньги. Норма: &gt;50%. Ниже 30% — ищи способ снизить закупочную цену.</div></div>
+  <div class="step"><span class="n">7</span><div><b>Выкуп %</b> = Выкупы ÷ Заказы × 100. Критичнейший показатель! Низкий выкуп = платишь за двойную логистику (туда + обратно) без дохода.</div></div>
+  <div class="step"><span class="n">8</span><div><b>Нормы выкупа:</b> &gt;80% — отлично, 70–80% — нормально, 60–70% — требует внимания, &lt;60% — срочно: проверь размерные сетки, качество, фото, описание.</div></div>
+  <div class="step"><span class="n">9</span><div><b>Почему падает выкуп:</b> несовпадение размера (одежда/обувь), вид товара на фото ≠ реальность, задержка доставки (покупатель не дождался), дублирующий заказ.</div></div>
+  <div class="step"><span class="n">10</span><div><b>Остаток, шт</b> — текущий остаток на складе WB. Обнуление = «out of stock» = WB резко понижает позицию в поиске. Восстановление позиций занимает 2–4 недели.</div></div>
+  <div class="step"><span class="n">11</span><div><b>Как считать минимальный остаток:</b> среднедневные продажи × (срок производства + срок доставки до склада WB + 7 дней буфер). Не допускай нуля!</div></div>
+  <div class="step"><span class="n">12</span><div><b>Налог</b> — в Настройках укажи свою ставку. УСН 6% с дохода → 6, УСН 15% «доходы-расходы» → учитывай расходы отдельно, ОСНО → 20%. Налог в РНП приблизительный.</div></div>
+  <div class="step"><span class="n">13</span><div><b>Юнит-экономика (вкладка Товары)</b> — расчёт прибыли/маржи на 1 штуку. Полезно для проверки новой цены или себестоимости без ручных вычислений.</div></div>
+  <div class="step"><span class="n">14</span><div><b>«К перечислению $»</b> в шапке товара — сумма в долларах по курсу из настроек. Удобно при закупке товара за рубежом — сразу видишь прибыльность в валюте закупки.</div></div>
+  <div class="step"><span class="n">15</span><div><b>Главное правило:</b> Маржа должна перекрывать ДРР с запасом. Если маржа 20% и ДРР стремится к 20% — бизнес работает «в ноль». Нужна либо выше маржа, либо ниже ДРР.</div></div>
+</div></div>
+
+<!-- ФОРМУЛЫ -->
+<div class="card help acc-card" id="hs-formulas"><div class="hd acc-hd" onclick="hToggle(this)"><span>🧮 Формулы и расчёты РНП</span><span class="acc-arr">▼</span></div><div class="hbody acc-body">
+  <div class="h-formula-grid">
+    <div class="h-fblock fin">
+      <div class="h-fblock-hd">💰 Финансы</div>
+      <div class="h-fml">К перечислению = Выкупы − (Цена×Комис%) × шт − Логист × шт</div>
+      <div class="h-fml">Прибыль = К перечислению − (Себест+Упак)×шт − Налог − РК</div>
+      <div class="h-fml">Маржа % = Прибыль ÷ Выкупы ₽ × 100</div>
+      <div class="h-fml">Рентабельность % = Прибыль ÷ (Себест × шт) × 100</div>
+    </div>
+    <div class="h-fblock funnel">
+      <div class="h-fblock-hd">🔵 Воронка</div>
+      <div class="h-fml">CTR % = Клики ÷ Показы × 100</div>
+      <div class="h-fml">Корзина % = Корзина ÷ Клики × 100</div>
+      <div class="h-fml">Заказы % = Заказы ÷ Клики × 100</div>
+      <div class="h-fml">CRO % = Заказы ÷ Показы × 100</div>
+      <div class="h-fml">Выкуп % = Выкупы шт ÷ Заказы шт × 100</div>
+      <div class="h-fml">% органики = (Клики − Клики РК) ÷ Клики × 100</div>
+    </div>
+    <div class="h-fblock ads">
+      <div class="h-fblock-hd">🟠 Реклама</div>
+      <div class="h-fml">ДРР % = Расход РК ÷ Выкупы ₽ × 100</div>
+      <div class="h-fml">CTR РК % = Клики РК ÷ Показы РК × 100</div>
+      <div class="h-fml">CRO РК % = Заказы ÷ Клики РК × 100</div>
+      <div class="h-fml">CPC ₽ = Расход РК ÷ Клики РК</div>
+      <div class="h-fml">Макс. CPC = Прибыль/заказ × Конверсия%/100</div>
+    </div>
+    <div class="h-fblock orders">
+      <div class="h-fblock-hd">🟢 Заказы</div>
+      <div class="h-fml">СР. Чек = Сумма заказов ÷ Кол-во заказов</div>
+      <div class="h-fml">Выпол. плана = Факт ÷ План × 100</div>
+      <div class="h-fml">Мин. остаток = СР.продаж/день × (Срок+14 дней)</div>
+    </div>
+  </div>
+  <div style="font-size:11px;color:var(--muted);margin-top:10px;padding:0 4px">* СР.Знач считается за дни с данными, не за все 30 дней месяца</div>
+</div></div>
+
+<!-- ДАННЫЕ И ИМПОРТ -->
+<div class="card help acc-card" id="hs-data"><div class="hd acc-hd" onclick="hToggle(this)"><span>📁 Данные — ввод, импорт, резервные копии</span><span class="acc-arr">▼</span></div><div class="hbody acc-body">
+  <!-- 3 способа -->
+  <div class="h-methods">
+    <div class="h-method">
+      <div class="h-method-icon">✋</div>
+      <div class="h-method-t">Вручную</div>
+      <div class="h-method-s">«＋ День» — одна запись, выбери дату и SKU</div>
+      <button class="h-method-btn" onclick="App.openDay()">Открыть форму</button>
+    </div>
+    <div class="h-method">
+      <div class="h-method-icon">📋</div>
+      <div class="h-method-t">CSV-файл</div>
+      <div class="h-method-s">Скачай шаблон, заполни в Excel, загрузи</div>
+      <button class="h-method-btn" onclick="App.downloadTemplate()">Скачать шаблон</button>
+    </div>
+    <div class="h-method">
+      <div class="h-method-icon">🤖</div>
+      <div class="h-method-t">API WB</div>
+      <div class="h-method-s">Автоматически: заказы, выкупы, остатки</div>
+      <button class="h-method-btn" onclick="App.switchTo('settings')">Настроить API</button>
+    </div>
+  </div>
+  <div class="step"><span class="n">1</span><div><b>3 способа вносить данные:</b> Вручную через «＋ День», массово через CSV-импорт (📥), автоматически через API Wildberries.</div></div>
+  <div class="step"><span class="n">2</span><div><b>Ручной ввод («＋ День»)</b> — открывается форма. Выбери товар, дату, введи: заказы (шт/₽), выкупы (шт/₽), показы, клики, корзины, расход РК, СПП%, остаток, раздачи.</div></div>
+  <div class="step"><span class="n">3</span><div><b>Повторный ввод за ту же дату + SKU</b> — данные перезапишутся. Используй для исправления ошибок. Старые данные не накапливаются.</div></div>
+  <div class="step"><span class="n">4</span><div><b>CSV-шаблон (кнопка 📋)</b> — скачивает файл с правильными заголовками. Открой в Excel или Google Sheets. Строку с комментарием (начинается с #) можно удалить.</div></div>
+  <div class="step"><span class="n">5</span><div><b>Заполнение CSV:</b> Дата в формате ГГГГ-ММ-ДД (2026-06-15), SKU должен точно совпадать. Числа — без пробелов и символа ₽. Незаполненные поля — оставляй пустыми или 0.</div></div>
+  <div class="step"><span class="n">6</span><div><b>CSV-импорт (кнопка 📥)</b> — выбери заполненный файл. Система найдёт совпадения по дате + SKU и обновит/добавит записи. Покажет счётчик: новых + обновлено.</div></div>
+  <div class="step"><span class="n">7</span><div><b>Если импорт не работает:</b> проверь что первая строка файла — заголовки (как в шаблоне). SKU должен совпадать ТОЧНО. Дата в формате ГГГГ-ММ-ДД.</div></div>
+  <div class="step"><span class="n">8</span><div><b>API WB (токен)</b> — Кабинет WB → аватар профиля → Настройки → Доступ к API → «Создать новый токен» → выбери «Статистика» → скопируй токен (начинается с eyJ...).</div></div>
+  <div class="step"><span class="n">9</span><div><b>Что даёт API:</b> заказы (дата, SKU, сумма), выкупы (дата, SKU, сумма), остатки. НЕ даёт: показы, клики, корзины, расход рекламы — это только из кабинета рекламы вручную.</div></div>
+  <div class="step"><span class="n">10</span><div><b>Дата начала для API</b> — выбирай с запасом (30–60 дней назад). Система заберёт всё с этой даты. Старые данные за тот же период перезапишутся.</div></div>
+  <div class="step"><span class="n">11</span><div><b>Архив месяца («💾 Архив»)</b> — сохраняет полный снэпшот месяца: данные, товары, план. Файл: data/archive/2026-06.json. Создавай в последний день месяца.</div></div>
+  <div class="step"><span class="n">12</span><div><b>Резервная копия базы</b> — файл data/db.json. Скопируй его в iCloud/Dropbox еженедельно. Этот файл = всё твоя аналитика. Потеря файла = потеря данных.</div></div>
+  <div class="step"><span class="n">13</span><div><b>Переключение месяцев</b> — кнопки ‹ › или пикер вверху. Все данные в одном файле, переключение мгновенное. «Рабочий месяц» по умолчанию = текущий.</div></div>
+  <div class="step"><span class="n">14</span><div><b>Скрыть ненужные строки</b> — «⚙️ Настройки» → «👁 Видимость строк». Можно скрыть целые секции или конкретные строки (план, раздачи, СПП и т.д.).</div></div>
+  <div class="step"><span class="n">15</span><div><b>Сервер РНП</b> — приложение работает локально. Запусти сервер командой `node server.js` в папке проекта. Адрес: http://127.0.0.1:4810. Работает без интернета.</div></div>
+</div></div>
+
+<!-- НОРМЫ -->
+<div class="card help acc-card" id="hs-norms"><div class="hd acc-hd" onclick="hToggle(this)"><span>📏 Нормы, ориентиры и тревожные сигналы</span><span class="acc-arr">▼</span></div><div class="hbody acc-body">
+  <!-- Таблица норм -->
+  <table class="h-norms-t">
+    <thead><tr><th>Показатель</th><th class="r">🔴 Плохо</th><th class="o">🟡 Средне</th><th class="g">🟢 Хорошо</th><th class="gg">⭐ Отлично</th></tr></thead>
+    <tbody>
+      <tr><td><b>CTR %</b></td><td class="r">&lt; 1%</td><td class="o">1–3%</td><td class="g">3–5%</td><td class="gg">&gt; 5%</td></tr>
+      <tr><td><b>Корзина %</b></td><td class="r">&lt; 5%</td><td class="o">5–10%</td><td class="g">10–20%</td><td class="gg">&gt; 20%</td></tr>
+      <tr><td><b>Заказы %</b></td><td class="r">&lt; 1%</td><td class="o">1–3%</td><td class="g">3–6%</td><td class="gg">&gt; 6%</td></tr>
+      <tr><td><b>Выкуп %</b></td><td class="r">&lt; 60%</td><td class="o">60–70%</td><td class="g">70–80%</td><td class="gg">&gt; 80%</td></tr>
+      <tr><td><b>Маржа %</b></td><td class="r">&lt; 5%</td><td class="o">5–15%</td><td class="g">15–30%</td><td class="gg">&gt; 30%</td></tr>
+      <tr><td><b>Рентаб. %</b></td><td class="r">&lt; 20%</td><td class="o">20–50%</td><td class="g">50–100%</td><td class="gg">&gt; 100%</td></tr>
+      <tr><td><b>ДРР % (одежда)</b></td><td class="r">&gt; 30%</td><td class="o">20–30%</td><td class="g">12–20%</td><td class="gg">&lt; 12%</td></tr>
+      <tr><td><b>CTR РК %</b></td><td class="r">&lt; 0.3%</td><td class="o">0.3–0.8%</td><td class="g">0.8–1.5%</td><td class="gg">&gt; 1.5%</td></tr>
+      <tr><td><b>Органика %</b></td><td class="r">&lt; 30%</td><td class="o">30–50%</td><td class="g">50–70%</td><td class="gg">&gt; 70%</td></tr>
+    </tbody>
+  </table>
+  <!-- Тревожные сигналы -->
+  <div class="h-alerts">
+    <div class="h-alert r">🚨 Остаток → 0</div>
+    <div class="h-alert r">🚨 Маржа &lt; ДРР</div>
+    <div class="h-alert r">🚨 Выкуп &lt; 50%</div>
+    <div class="h-alert r">🚨 Прибыль отриц.</div>
+    <div class="h-alert o">⚠️ ДРР &gt; цел. на 20%</div>
+    <div class="h-alert o">⚠️ План &lt; 40% на нед.2</div>
+    <div class="h-alert o">⚠️ CTR &lt; 1%</div>
+  </div>
+  <div class="step"><span class="n">1</span><div><b>CTR главного фото:</b> &lt;1% — срочно меняй фото, 1–3% — средне, 3–5% — хорошо, &gt;5% — отлично. Тестируй A/B каждые 2–4 недели.</div></div>
+  <div class="step"><span class="n">2</span><div><b>Корзина %:</b> &lt;5% — проблема, 5–10% — средне, 10–20% — хорошо, &gt;20% — отлично. Ниже нормы = работа с описанием, ценой, отзывами.</div></div>
+  <div class="step"><span class="n">3</span><div><b>Конверсия в заказ (Заказы %):</b> &lt;1% — критично, 1–3% — ниже среднего, 3–6% — норма, &gt;6% — отлично. Зависит от ниши.</div></div>
+  <div class="step"><span class="n">4</span><div><b>Выкуп %:</b> &gt;80% — отлично, 70–80% — норма, 60–70% — следи, &lt;60% — срочно разбирайся (размерная сетка, качество, описание).</div></div>
+  <div class="step"><span class="n">5</span><div><b>ДРР % по нишам:</b> Одежда/обувь 15–25%, Электроника 5–12%, Дом/сад 10–20%, Красота 12–22%, Продукты 5–15%, Детские 8–18%.</div></div>
+  <div class="step"><span class="n">6</span><div><b>Маржа:</b> &lt;5% — убыточно с учётом рисков, 5–10% — минимально, 10–20% — удовл., 20–35% — хорошо, &gt;35% — отлично.</div></div>
+  <div class="step"><span class="n">7</span><div><b>Рентабельность:</b> &lt;20% — ищи снижение себест., 20–50% — нормально, 50–100% — хорошо, &gt;100% — отлично.</div></div>
+  <div class="step"><span class="n">8</span><div><b>Органика кликов:</b> &lt;40% — сильная зависимость от рекламы, 40–60% — средне, &gt;60% — хорошее SEO.</div></div>
+  <div class="step"><span class="n">9</span><div><b>CTR РК:</b> &lt;0.3% — нерелевантный таргетинг, 0.3–1.5% — норма, &gt;1.5% — очень хорошо для WB рекламы.</div></div>
+  <div class="step"><span class="n">10</span><div><b>🚨 Тревожные сигналы:</b> Остаток → 0 (пополни срочно!), Выкуп &lt;50% (двойная логистика = убыток), Маржа &lt; ДРР (работаешь в минус), Прибыль отрицательная.</div></div>
+  <div class="step"><span class="n">11</span><div><b>СПП при расчёте:</b> при СПП &gt;30% реальная выручка значительно ниже цены. Пример: цена 1000₽, СПП 35% → получаешь ~650–700₽. Пересчитай юнит-экономику.</div></div>
+  <div class="step"><span class="n">12</span><div><b>Минимальный остаток на складе</b> = среднедневные продажи × (срок поставки + 14 дней буфер). Никогда не допускай обнуления — восстановление позиций занимает 2–4 недели.</div></div>
+  <div class="step"><span class="n">13</span><div><b>Выполнение плана по неделям:</b> Нед.1 → ~22%, Нед.2 → ~48%, Нед.3 → ~74%, Нед.4 → ~100%. Отставание от этих ориентиров = пора принимать меры.</div></div>
+  <div class="step"><span class="n">14</span><div><b>Частота анализа:</b> Остаток — ежедневно, ДРР + заказы — еженедельно, маржа + воронка — ежемесячно. «Рука на пульсе» — буквально каждый день.</div></div>
+  <div class="step"><span class="n">15</span><div><b>Статусы товаров:</b> «Локомотив» — максимальные вложения и внимание. «Рост» — масштабируй что работает. «Аутсайдер» — реши: улучшить или вывести из продаж. «Новинка» — дай 2–3 месяца для раскачки.</div></div>
+</div></div>
+
+</div><!-- /help-grid2 -->
+  </div><!-- /help-wrap -->
+</div>
+
+</div><!-- /wrap -->
+
+<!-- MODAL: день -->
+<div class="modal" id="mDay"><div class="sheet">
+  <button class="modal-close" onclick="App.close('mDay')" title="Закрыть">✕</button>
+  <h2 id="dayTitle">Добавить день</h2>
+  <input type="hidden" id="dId">
+
+  <!-- Основное -->
+  <div class="msec"><div class="msec-t">📋 Основное</div>
+    <div class="grid3" style="padding:14px">
+      <div class="fld"><label>Дата</label><input type="date" id="dayDate"></div>
+      <div class="fld"><label>Товар (SKU)</label>
+        <select id="daySku"><option value="">— выбери товар —</option></select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Заказы и продажи -->
+  <div class="msec"><div class="msec-t">📦 Заказы и продажи</div>
+    <div class="grid3" style="padding:14px">
+      <div class="fld"><label>Заказы, шт</label><input type="number" id="dayOrdQ" min="0" placeholder="0"></div>
+      <div class="fld"><label>Заказы, ₽</label><input type="number" id="dayOrdS" min="0" placeholder="0"></div>
+      <div class="fld"></div>
+      <div class="fld"><label>Выкупы, шт</label><input type="number" id="dayBuyQ" min="0" placeholder="0"></div>
+      <div class="fld"><label>Выкупы, ₽</label><input type="number" id="dayBuyS" min="0" placeholder="0"></div>
+    </div>
+  </div>
+
+  <!-- Воронка -->
+  <div class="msec"><div class="msec-t">👁 Воронка</div>
+    <div class="grid3" style="padding:14px">
+      <div class="fld"><label>Показы</label><input type="number" id="dayShows" min="0" placeholder="0"></div>
+      <div class="fld"><label>Клики</label><input type="number" id="dayClicks" min="0" placeholder="0"></div>
+      <div class="fld"><label>Корзина, шт</label><input type="number" id="dayCart" min="0" placeholder="0"></div>
+      <div class="fld"><label>Остаток, шт</label><input type="number" id="dayStock" min="0" placeholder="текущий остаток на WB"></div>
+    </div>
+  </div>
+
+  <!-- Реклама -->
+  <div class="msec"><div class="msec-t">📣 Реклама (РК)</div>
+    <div class="grid3" style="padding:14px">
+      <div class="fld"><label>Показы РК</label><input type="number" id="dayAdsShows" min="0" placeholder="0"></div>
+      <div class="fld"><label>Клики РК</label><input type="number" id="dayAdsClicks" min="0" placeholder="0"></div>
+      <div class="fld"><label>Расход РК, ₽</label><input type="number" id="dayAdsSpend" min="0" placeholder="0"></div>
+    </div>
+  </div>
+
+  <!-- Прочее -->
+  <div class="msec"><div class="msec-t">💡 Прочее</div>
+    <div class="grid3" style="padding:14px">
+      <div class="fld"><label>СПП %</label><input type="number" id="daySpp" min="0" max="100" step="0.1" placeholder="скидка постоянного покупателя"></div>
+      <div class="fld"><label>Раздачи, шт</label><input type="number" id="dayGiveaway" min="0" placeholder="0"></div>
+    </div>
+  </div>
+
+  <datalist id="skuList"></datalist>
+  <div class="sheet-act">
+    <button class="btn ghost" onclick="App.close('mDay')">Отмена</button>
+    <button class="btn" onclick="App.saveDay()">💾 Сохранить</button>
+  </div>
+</div></div>
+
+<!-- MODAL: добавить товар -->
+<div class="modal" id="mAddProd"><div class="sheet" style="max-width:520px">
+  <button class="modal-close" onclick="App.close('mAddProd')" title="Закрыть">✕</button>
+  <h2>＋ Новый товар</h2>
+
+  <div class="msec"><div class="msec-t">🏷 Основное</div>
+    <div class="grid3" style="padding:14px">
+      <div class="fld" style="grid-column:span 2"><label>Название товара</label><input id="apName" placeholder="напр. Рюкзак городской чёрный"></div>
+      <div class="fld"><label>SKU (артикул)</label><input id="apSku" placeholder="напр. BP-BLACK-01"></div>
+      <div class="fld"><label>Арт. WB (nmId)</label><input id="apWbId" placeholder="722616909"></div>
+      <div class="fld"><label>Статус</label>
+        <select id="apStatus">
+          <option value="">НЕ ВЫБРАНО</option>
+          <option value="Локомотив">Локомотив</option>
+          <option value="Рост">Рост</option>
+          <option value="Аутсайдер">Аутсайдер</option>
+          <option value="Новинка">Новинка</option>
+        </select>
+      </div>
+      <div class="fld"><label>Ответственный</label><input id="apManager" placeholder="Имя менеджера"></div>
+    </div>
+  </div>
+
+  <div class="msec"><div class="msec-t">💰 Финансы</div>
+    <div class="grid3" style="padding:14px">
+      <div class="fld"><label>Цена продажи, ₽</label><input type="number" id="apPrice" min="0" placeholder="0"></div>
+      <div class="fld"><label>Себестоимость, ₽</label><input type="number" id="apCost" min="0" placeholder="0"></div>
+      <div class="fld"><label>Упаковка, ₽/шт</label><input type="number" id="apPkg" min="0" placeholder="0"></div>
+      <div class="fld"><label>Логистика WB, ₽/шт</label><input type="number" id="apLog" min="0" placeholder="0"></div>
+      <div class="fld"><label>Комиссия WB, %</label><input type="number" id="apComm" min="0" max="100" step=".5" placeholder="15"></div>
+      <div class="fld"><label>Выкуп плановый, %</label><input type="number" id="apBuyout" min="0" max="100" placeholder="70"></div>
+      <div class="fld"><label>Целевой ДРР, %</label><input type="number" id="apPlanDrr" min="0" max="100" step=".5" placeholder="15"></div>
+    </div>
+  </div>
+
+  <div class="sheet-act">
+    <button class="btn ghost" onclick="App.close('mAddProd')">Отмена</button>
+    <button class="btn" onclick="App.saveNewProduct()">💾 Сохранить</button>
+  </div>
+</div></div>
+
+<!-- ТАБЫ ВНИЗУ как в Google Sheets -->
+<div class="sheet-tabs">
+  <button class="sheet-tab active" data-p="rnp">📊 РНП</button>
+  <button class="sheet-tab" data-p="products">🏷 Товары и план</button>
+  <button class="sheet-tab" data-p="settings">⚙️ Настройки</button>
+  <button class="sheet-tab" data-p="help">📖 Инструкция</button>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
