@@ -1,0 +1,12 @@
+{
+  "name": "wb-rnp",
+  "version": "5.0.0",
+  "description": "РНП · Рука на пульсе — аналитика Wildberries",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
