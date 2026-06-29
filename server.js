@@ -26,40 +26,87 @@ function saveDB(db) {
 
 // ---- Demo seed (Railway / first launch) ----
 function seedDemo(db) {
-  if (db.products.length) return; // уже есть данные
+  if (db.products.length) return;
+
+  // 6 товаров — разные ниши, статусы, экономика
   const prods = [
-    { id:'d1', sku:'Платье_лето',    wbId:'112233', name:'Платье летнее',   cost:800,  pkg:50, commission:15, logistics:120, buyout:72, price:2490, manager:'Аня',  status:'Локомотив', planDrr:15 },
-    { id:'d2', sku:'Ветровка_синяя', wbId:'224455', name:'Ветровка синяя',  cost:1200, pkg:70, commission:15, logistics:150, buyout:68, price:3290, manager:'Дима', status:'Рост',      planDrr:20 },
-    { id:'d3', sku:'Джинсы_slim',    wbId:'336677', name:'Джинсы slim fit', cost:950,  pkg:60, commission:15, logistics:130, buyout:75, price:2890, manager:'Аня',  status:'Новинка',   planDrr:18 },
+    { id:'d1', sku:'Платье_цветочное', wbId:'1122334', name:'Платье цветочное миди', cost:890,  pkg:55,  commission:15, logistics:125, buyout:74, price:2790, manager:'Аня',   status:'Локомотив', planDrr:14 },
+    { id:'d2', sku:'Ветровка_черная',  wbId:'2233445', name:'Ветровка чёрная оверсайз', cost:1350, pkg:80,  commission:15, logistics:160, buyout:66, price:3590, manager:'Дима',  status:'Рост',      planDrr:19 },
+    { id:'d3', sku:'Джинсы_mom',       wbId:'3344556', name:'Джинсы mom fit светлые',   cost:1050, pkg:65,  commission:15, logistics:140, buyout:77, price:3190, manager:'Аня',   status:'Рост',      planDrr:17 },
+    { id:'d4', sku:'Топ_базовый',      wbId:'4455667', name:'Топ базовый рибана',       cost:280,  pkg:30,  commission:15, logistics:90,  buyout:82, price:890,  manager:'Света', status:'Локомотив', planDrr:12 },
+    { id:'d5', sku:'Юбка_плиссе',      wbId:'5566778', name:'Юбка плиссе миди',         cost:620,  pkg:45,  commission:15, logistics:110, buyout:58, price:1990, manager:'Света', status:'Аутсайдер', planDrr:22 },
+    { id:'d6', sku:'Кардиган_oversize', wbId:'6677889', name:'Кардиган оверсайз вязаный', cost:1100, pkg:70, commission:15, logistics:150, buyout:71, price:2990, manager:'Дима',  status:'Новинка',   planDrr:20 },
   ];
-  const rng = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
-  const ym = new Date().toISOString().slice(0,7);
-  const [y,m] = ym.split('-').map(Number);
-  const daysInMonth = new Date(y, m, 0).getDate();
-  const today = new Date().getDate();
+
+  // Профили поведения по товарам: [showsBase, ctrPct, cartPct, ordPctOfClicks, buyoutPct, adsShareOfShows, adsCtrPct, sppBase, stockBase, adsSpendBase]
+  const profiles = {
+    'Платье_цветочное': { shows:[18000,28000], ctr:[3.5,5.5], cart:[11,18], ord:[4.5,7],   buyout:[70,78], adsShare:.35, adsCtr:[.8,1.4], spp:[12,22], stock:[180,280], ads:[1800,3500], trend:1.08  },
+    'Ветровка_черная':  { shows:[12000,20000], ctr:[2.8,4.5], cart:[8,14],  ord:[3.2,5.5], buyout:[62,70], adsShare:.42, adsCtr:[.6,1.1], spp:[15,25], stock:[90,160],  ads:[2200,4000], trend:1.05  },
+    'Джинсы_mom':       { shows:[14000,22000], ctr:[3.0,4.8], cart:[9,15],  ord:[3.8,6],   buyout:[73,81], adsShare:.38, adsCtr:[.7,1.2], spp:[10,20], stock:[120,200], ads:[1600,3000], trend:1.06  },
+    'Топ_базовый':      { shows:[22000,38000], ctr:[4.0,6.5], cart:[13,22], ord:[5.5,9],   buyout:[78,86], adsShare:.28, adsCtr:[.9,1.6], spp:[8,18],  stock:[350,600], ads:[900,2000],  trend:1.10  },
+    'Юбка_плиссе':      { shows:[8000,14000],  ctr:[1.8,3.2], cart:[5,10],  ord:[2.0,3.5], buyout:[52,65], adsShare:.50, adsCtr:[.4,.9],  spp:[18,28], stock:[40,90],   ads:[1200,2800], trend:0.96  },
+    'Кардиган_oversize':{ shows:[9000,16000],  ctr:[2.2,3.8], cart:[7,13],  ord:[2.8,4.5], buyout:[67,75], adsShare:.45, adsCtr:[.5,1.0], spp:[12,20], stock:[70,130],  ads:[1400,3200], trend:1.03  },
+  };
+
+  const rng  = (a,b) => Math.random()*(b-a)+a;
+  const irng = (a,b) => Math.floor(rng(a,b));
+  const ym   = new Date().toISOString().slice(0,7);
+  const [y,m]= ym.split('-').map(Number);
+  const daysInMonth = new Date(y,m,0).getDate();
+  const todayD = new Date().getDate();
+  const DOW = [0,1,2,3,4,5,6]; // 0=Sun
+
   const days = [];
-  for (let d = 1; d <= Math.min(today, daysInMonth); d++) {
+  for (let d = 1; d <= Math.min(todayD, daysInMonth); d++) {
     const date = `${ym}-${String(d).padStart(2,'0')}`;
+    const dow  = new Date(y,m-1,d).getDay(); // 0=Вс,6=Сб
+    const isWknd = dow === 0 || dow === 6;
+    const progress = d / daysInMonth; // 0..1 — рост к концу месяца
+
     for (const p of prods) {
-      const ordQ = rng(8,35); const buyQ = Math.max(0, Math.round(ordQ*(p.buyout/100)*(.9+Math.random()*.2)));
-      const shows = rng(8000,25000); const clicks = Math.round(shows*(.02+Math.random()*.04));
+      const pr = profiles[p.sku];
+      if (!pr) continue;
+
+      // Тренд + выходные (-20% в выходные для рабочей одежды, +15% для базовых)
+      const trendMult = Math.pow(pr.trend, progress * 30);
+      const wkndMult  = isWknd ? (p.sku === 'Топ_базовый' ? 1.15 : 0.80) : 1.0;
+      const noise     = 0.88 + Math.random() * 0.24;
+
+      const shows     = Math.round(irng(...pr.shows) * trendMult * wkndMult * noise);
+      const clicks    = Math.round(shows * rng(...pr.ctr) / 100);
+      const cart      = Math.round(clicks * rng(...pr.cart) / 100);
+      const ordQ      = Math.round(clicks * rng(...pr.ord) / 100);
+      const buyoutPct = rng(...pr.buyout) / 100;
+      const buyQ      = Math.max(0, Math.round(ordQ * buyoutPct * (0.92 + Math.random()*.16)));
+      const spp       = Math.round(rng(...pr.spp) * 10) / 10;
+      const effectivePrice = p.price * (1 - spp/100);
+      const ordS      = Math.round(ordQ * effectivePrice);
+      const buyS      = Math.round(buyQ * effectivePrice * 0.97);
+      const adsShows  = Math.round(shows * pr.adsShare * (0.9 + Math.random()*.2));
+      const adsClicks = Math.round(adsShows * rng(...pr.adsCtr) / 100);
+      const adsSpend  = irng(...pr.ads) * (isWknd ? 0.7 : 1.0);
+      const stock     = Math.max(5, irng(...pr.stock) - Math.round(d * buyQ * 0.1));
+      const giveaway  = d <= 5 && Math.random() > 0.6 ? irng(1,3) : 0;
+
       days.push({ id:`demo_${p.sku}_${date}`, date, sku:p.sku,
-        ordQ, ordS:ordQ*p.price, buyQ, buyS:Math.round(buyQ*p.price*.87),
-        stock:rng(50,300), shows, clicks, cart:Math.round(clicks*(.08+Math.random()*.1)),
-        adsShows:Math.round(shows*.4), adsClicks:Math.round(clicks*.35), adsSpend:rng(500,3000),
-        spp:Math.round((.1+Math.random()*.15)*100)/100*100, giveaway:rng(0,2), source:'demo' });
+        ordQ, ordS, buyQ, buyS, stock, shows, clicks, cart,
+        adsShows, adsClicks, adsSpend, spp, giveaway, source:'demo' });
     }
   }
+
   const planKey = ym;
   db.products = prods;
-  db.days = days;
-  db.plans = { [planKey]: {
-    'Платье_лето':    { ordQty:600, ordRub:1494000, buyQty:432 },
-    'Ветровка_синяя': { ordQty:400, ordRub:1316000, buyQty:272 },
-    'Джинсы_slim':    { ordQty:350, ordRub:1011500, buyQty:262 },
+  db.days     = days;
+  db.plans    = { [planKey]: {
+    'Платье_цветочное':  { ordQty:700,  ordRub:1953000, buyQty:518 },
+    'Ветровка_черная':   { ordQty:420,  ordRub:1507800, buyQty:277 },
+    'Джинсы_mom':        { ordQty:480,  ordRub:1531200, buyQty:370 },
+    'Топ_базовый':       { ordQty:1200, ordRub:1068000, buyQty:984 },
+    'Юбка_плиссе':       { ordQty:280,  ordRub:557200,  buyQty:162 },
+    'Кардиган_oversize': { ordQty:320,  ordRub:956800,  buyQty:227 },
   }};
   db.settings = { apiKey:'', taxRate:7, usdRate:90 };
-  addLog(db, '🎉 Демо-данные загружены. Добавляй свои товары и данные!');
+  addLog(db, '🎉 Демо-кабинет загружен: 6 товаров, полный месяц данных. Замени на свои!');
   saveDB(db);
 }
 function addLog(db, msg) {
