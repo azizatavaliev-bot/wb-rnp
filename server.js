@@ -3,7 +3,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = 4810;
+const PORT = process.env.PORT || 4810;
 const DB = path.join(__dirname, 'data', 'db.json');
 const PUB = path.join(__dirname, 'public');
 
