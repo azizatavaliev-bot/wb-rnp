@@ -20,7 +20,48 @@ function loadDB() {
   try { return Object.assign({}, DEFAULT_DB, JSON.parse(fs.readFileSync(DB, 'utf8'))); }
   catch { return JSON.parse(JSON.stringify(DEFAULT_DB)); }
 }
-function saveDB(db) { fs.writeFileSync(DB, JSON.stringify(db, null, 2)); }
+function saveDB(db) {
+  try { fs.writeFileSync(DB, JSON.stringify(db, null, 2)); } catch {}
+}
+
+// ---- Demo seed (Railway / first launch) ----
+function seedDemo(db) {
+  if (db.products.length) return; // уже есть данные
+  const prods = [
+    { id:'d1', sku:'Платье_лето',    wbId:'112233', name:'Платье летнее',   cost:800,  pkg:50, commission:15, logistics:120, buyout:72, price:2490, manager:'Аня',  status:'Локомотив', planDrr:15 },
+    { id:'d2', sku:'Ветровка_синяя', wbId:'224455', name:'Ветровка синяя',  cost:1200, pkg:70, commission:15, logistics:150, buyout:68, price:3290, manager:'Дима', status:'Рост',      planDrr:20 },
+    { id:'d3', sku:'Джинсы_slim',    wbId:'336677', name:'Джинсы slim fit', cost:950,  pkg:60, commission:15, logistics:130, buyout:75, price:2890, manager:'Аня',  status:'Новинка',   planDrr:18 },
+  ];
+  const rng = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
+  const ym = new Date().toISOString().slice(0,7);
+  const [y,m] = ym.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const today = new Date().getDate();
+  const days = [];
+  for (let d = 1; d <= Math.min(today, daysInMonth); d++) {
+    const date = `${ym}-${String(d).padStart(2,'0')}`;
+    for (const p of prods) {
+      const ordQ = rng(8,35); const buyQ = Math.max(0, Math.round(ordQ*(p.buyout/100)*(.9+Math.random()*.2)));
+      const shows = rng(8000,25000); const clicks = Math.round(shows*(.02+Math.random()*.04));
+      days.push({ id:`demo_${p.sku}_${date}`, date, sku:p.sku,
+        ordQ, ordS:ordQ*p.price, buyQ, buyS:Math.round(buyQ*p.price*.87),
+        stock:rng(50,300), shows, clicks, cart:Math.round(clicks*(.08+Math.random()*.1)),
+        adsShows:Math.round(shows*.4), adsClicks:Math.round(clicks*.35), adsSpend:rng(500,3000),
+        spp:Math.round((.1+Math.random()*.15)*100)/100*100, giveaway:rng(0,2), source:'demo' });
+    }
+  }
+  const planKey = ym;
+  db.products = prods;
+  db.days = days;
+  db.plans = { [planKey]: {
+    'Платье_лето':    { ordQty:600, ordRub:1494000, buyQty:432 },
+    'Ветровка_синяя': { ordQty:400, ordRub:1316000, buyQty:272 },
+    'Джинсы_slim':    { ordQty:350, ordRub:1011500, buyQty:262 },
+  }};
+  db.settings = { apiKey:'', taxRate:7, usdRate:90 };
+  addLog(db, '🎉 Демо-данные загружены. Добавляй свои товары и данные!');
+  saveDB(db);
+}
 function addLog(db, msg) {
   db.log.unshift({ t: new Date().toISOString(), msg });
   db.log = db.log.slice(0, 200);
@@ -161,5 +202,9 @@ const server = http.createServer(async (req, res) => {
     res.end(data);
   });
 });
+
+// Seed demo data on first launch
+const _startDb = loadDB();
+seedDemo(_startDb);
 
 server.listen(PORT, '0.0.0.0', () => console.log(`РНП запущена → http://localhost:${PORT}`));
