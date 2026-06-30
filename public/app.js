@@ -97,12 +97,18 @@ const App = (() => {
     const pkgT  = (p.pkg||0) * f.buyQ;
     const taxT  = kp * (tax||0) / 100;
     const profit = kp - costT - pkgT - taxT - f.adsSpend;
+    const kPerechPer = f.buyQ>0 ? kp/f.buyQ : 0;
+    const profitPer  = f.buyQ>0 ? profit/f.buyQ : 0;
+    const logPct     = rev>0 ? log/rev*100 : 0;
+    const wbSharePct = rev>0 ? (comm+log)/rev*100 : 0;
+    const wbDrrPct   = rev>0 ? (comm+log+f.adsSpend)/rev*100 : 0;
     return {
-      kPerech : kp,
+      kPerech : kp, kPerechPer,
       rentab  : costT>0 ? kp/costT*100 : 0,
       margin  : rev>0 ? profit/rev*100 : 0,
       drr     : f.buyS>0 ? f.adsSpend/f.buyS*100 : 0,
-      profit,
+      profit, profitPer,
+      logPct, wbSharePct, wbDrrPct,
       buyoutPct : f.ordQ>0 ? f.buyQ/f.ordQ*100 : (p.buyout||0),
       avgCheck  : f.ordQ>0 ? f.ordS/f.ordQ : 0,
       ctr    : f.shows>0  ? f.clicks/f.shows*100   : 0,
@@ -674,9 +680,14 @@ const App = (() => {
     row('Сумма продаж ₽ <span class="tip" data-tip="Сумма выкупов в рублях = доход от покупателей до вычетов WB.">?</span>', avgF.buyS, wkF.map(f=>f.buyS), fTot.buyS, dayF.map(f=>f.buyS), fmt);
     row('Выкуп % <span class="tip" data-tip="Выкупы ÷ Заказы × 100. КРИТИЧЕСКИ ВАЖНО: низкий выкуп = платишь двойную логистику. Норма: >70%.">?</span>', avgE.buyoutPct, wkE.map(e=>e.buyoutPct), eTot.buyoutPct, dayE.map(e=>e.buyoutPct), v=>fmtP(v,1));
     row('К перечислению ₽ <span class="tip" data-tip="Сумма которую WB переведёт = Выкупы − Комиссия WB − Логистика × кол-во. До вычета себест. и налогов.">?</span>', avgE.kPerech, wkE.map(e=>e.kPerech), eTot.kPerech, dayE.map(e=>e.kPerech), v=>fmt(v,0));
+    row('К перечислению на ед ₽ <span class="tip" data-tip="К перечислению ÷ кол-во выкупов. Доход с одной единицы товара до вычета себест.">?</span>', avgE.kPerechPer, wkE.map(e=>e.kPerechPer), eTot.kPerechPer, dayE.map(e=>e.kPerechPer), v=>fmt(v,0));
     row('Прибыль ₽ <span class="tip" data-tip="Чистая прибыль = К перечислению − Себест − Упаковка − Налог − Реклама. Главная метрика.">?</span>', avgE.profit, wkE.map(e=>e.profit), eTot.profit, dayE.map(e=>e.profit), v=>fmt(v,0));
+    row('Прибыль на ед ₽ <span class="tip" data-tip="Прибыль ÷ кол-во выкупов. Чистый заработок с одной штуки.">?</span>', avgE.profitPer, wkE.map(e=>e.profitPer), eTot.profitPer, dayE.map(e=>e.profitPer), v=>fmt(v,0));
     row('Маржа % <span class="tip" data-tip="Прибыль ÷ Выкупы × 100. Норма для WB: 15-35%. Маржа < 0 = убыток.">?</span>', avgE.margin, wkE.map(e=>e.margin), eTot.margin, dayE.map(e=>e.margin), v=>fmtP(v,1));
     row('Рентабельность % <span class="tip" data-tip="Прибыль ÷ Себестоимость × 100. Отдача на вложенные деньги. Норма: >50%.">?</span>', avgE.rentab, wkE.map(e=>e.rentab), eTot.rentab, dayE.map(e=>e.rentab), v=>fmtP(v,1));
+    row('Логистика % <span class="tip" data-tip="Расход на логистику ÷ Выкупы × 100. Показывает нагрузку логистики на выручку.">?</span>', avgE.logPct, wkE.map(e=>e.logPct), eTot.logPct, dayE.map(e=>e.logPct), v=>fmtP(v,1));
+    row('Доля ВБ % (без ДРР) <span class="tip" data-tip="(Комиссия + Логистика) ÷ Выкупы × 100. Полная нагрузка WB без учёта рекламы.">?</span>', avgE.wbSharePct, wkE.map(e=>e.wbSharePct), eTot.wbSharePct, dayE.map(e=>e.wbSharePct), v=>fmtP(v,1));
+    row('Доля ВБ с ДРР % <span class="tip" data-tip="(Комиссия + Логистика + Реклама) ÷ Выкупы × 100. Вся нагрузка на выручку.">?</span>', avgE.wbDrrPct, wkE.map(e=>e.wbDrrPct), eTot.wbDrrPct, dayE.map(e=>e.wbDrrPct), v=>fmtP(v,1));
     row('Остаток, шт <span class="tip" data-tip="Текущий остаток на складе WB. Обнуление = потеря позиций в поиске. Следи за пополнением.">?</span>', null, wkF.map(f=>f.stock), fTot.stock, dayF.map(f=>f.stock), fmt);
 
     const table = `<div class="pg-wrap">
@@ -1145,16 +1156,45 @@ const App = (() => {
   const CSV_LABELS = ['Дата (ГГГГ-ММ-ДД)','SKU товара','Заказы шт','Заказы руб','Продажи шт','Продажи руб','Остаток шт','Показы','Клики','Корзина шт','Показы РК','Клики РК','Расход РК руб','СПП %','Раздачи шт'];
 
   function downloadTemplate() {
+    // Пустой шаблон для ручного заполнения
     const skuList = db.products.map(p => p.sku).join(' / ');
     const rows = [
       CSV_LABELS.join(','),
-      CSV_COLS.join(','),
       `# SKU доступные: ${skuList}`,
       `2026-06-01,${db.products[0]?.sku || 'Мой-SKU'},5,3500,3,2100,235,15000,180,45,8000,90,1200,13.5,0`
     ];
     const blob = new Blob(['﻿' + rows.join('\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = 'rnp-template.csv'; a.click();
+    a.download = 'rnp-шаблон.csv'; a.click();
+  }
+
+  function exportData(mode) {
+    // mode: 'month' = текущий месяц, 'all' = все данные
+    const ym = $('month').value || new Date().toISOString().slice(0,7);
+    const filtered = mode === 'month'
+      ? db.days.filter(d => d.date && d.date.startsWith(ym))
+      : db.days;
+    if (!filtered.length) return toast('Нет данных для экспорта');
+    const sorted = [...filtered].sort((a,b) => a.date < b.date ? -1 : 1);
+    const rows = [CSV_LABELS.join(',')];
+    for (const d of sorted) {
+      rows.push([
+        d.date, d.sku,
+        d.ordQ||0, d.ordS||0,
+        d.buyQ||0, d.buyS||0,
+        d.stock||0, d.shows||0,
+        d.clicks||0, d.cart||0,
+        d.adsShows||0, d.adsClicks||0,
+        d.adsSpend||0,
+        (d.spp||0).toFixed(2),
+        d.giveaway||0
+      ].join(','));
+    }
+    const fname = mode === 'month' ? `rnp-данные-${ym}.csv` : 'rnp-все-данные.csv';
+    const blob = new Blob(['﻿' + rows.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = fname; a.click();
+    toast(`Экспорт: ${filtered.length} записей`);
   }
 
   function importCsv() { $('csvFileInput').click(); }
@@ -1212,7 +1252,7 @@ const App = (() => {
   }
 
   window.addEventListener('DOMContentLoaded', init);
-  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,wbTest,wbSync,theme,calcTestPrice,downloadTemplate,importCsv,handleCsvFile,shiftMonth,archiveMonth,toggleHidden,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory};
+  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,wbTest,wbSync,theme,calcTestPrice,downloadTemplate,exportData,importCsv,handleCsvFile,shiftMonth,archiveMonth,toggleHidden,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory};
 })();
 
 // Аккордеон инструкции (глобальные функции)
