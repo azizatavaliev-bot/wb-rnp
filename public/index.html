@@ -559,6 +559,17 @@
   <h2 id="dayTitle">Добавить день</h2>
   <input type="hidden" id="dId">
 
+  <!-- Быстрая загрузка из файла -->
+  <div class="msec" style="background:var(--sec-bg);border-color:var(--acc)">
+    <div class="msec-t" style="color:var(--sec-ink)">📥 Загрузить из Excel / CSV</div>
+    <div style="padding:12px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <button class="btn ghost" style="font-size:12px" onclick="App.downloadTemplate()">📋 Скачать шаблон</button>
+      <button class="btn" style="font-size:12px" onclick="$('dayFileInput').click()">📂 Загрузить файл</button>
+      <input type="file" id="dayFileInput" accept=".csv,.xlsx,.xls" style="display:none" onchange="App.handleCsvFile(this)">
+      <span style="font-size:11px;color:var(--muted)">CSV с колонками: дата, SKU, заказы, продажи, показы…</span>
+    </div>
+  </div>
+
   <!-- Основное -->
   <div class="msec"><div class="msec-t">📋 Основное</div>
     <div class="grid3" style="padding:14px">

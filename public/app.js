@@ -1215,16 +1215,33 @@ const App = (() => {
   const CSV_LABELS = ['Дата (ГГГГ-ММ-ДД)','SKU товара','Заказы шт','Заказы руб','Продажи шт','Продажи руб','Остаток шт','Показы','Клики','Корзина шт','Показы РК','Клики РК','Расход РК руб','СПП %','Раздачи шт','Возвраты шт','Хранение руб'];
 
   function downloadTemplate() {
-    // Пустой шаблон для ручного заполнения
-    const skuList = db.products.map(p => p.sku).join(' / ');
+    const today = new Date().toISOString().slice(0,10);
     const rows = [
+      '# РНП — Шаблон ежедневного отчёта. Заполни и загрузи через кнопку "Загрузить файл"',
+      '# Обязательные колонки: Дата (ГГГГ-ММ-ДД) и SKU товара. Остальные — по наличию данных.',
+      '# Показы/Клики/Корзина/Реклама — из раздела "Аналитика" в личном кабинете WB.',
+      '# Хранение руб — из отчёта "Расчёт платного хранения" в WB (раздел Финансы).',
       CSV_LABELS.join(','),
-      `# SKU доступные: ${skuList}`,
-      `2026-06-01,${db.products[0]?.sku || 'Мой-SKU'},5,3500,3,2100,235,15000,180,45,8000,90,1200,13.5,0`
     ];
+    // Пример строки для каждого товара
+    if (db.products.length) {
+      db.products.forEach(p => {
+        const price = p.price || 1000;
+        const buyQ = 3; const ordQ = 4;
+        rows.push([
+          today, p.sku,
+          ordQ, Math.round(ordQ * price * 0.9),
+          buyQ, Math.round(buyQ * price * 0.88),
+          100, 12000, 150, 40,
+          5000, 60, 800, 13, 0, 0, Math.round(100 * 1.2)
+        ].join(','));
+      });
+    } else {
+      rows.push(`${today},Мой-SKU,4,3600,3,2700,100,12000,150,40,5000,60,800,13,0,0,120`);
+    }
     const blob = new Blob(['﻿' + rows.join('\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = 'rnp-шаблон.csv'; a.click();
+    a.download = `rnp-шаблон-${today}.csv`; a.click();
   }
 
   function exportData(mode) {
@@ -1289,7 +1306,11 @@ const App = (() => {
         const existing = db.days.findIndex(d => d.id === id);
         if (existing >= 0) { db.days[existing] = rec; updated++; } else { db.days.push(rec); added++; }
       }
-      save().then(() => { render(); toast(`Импорт: +${added} новых, ${updated} обновлено`); }).catch(e => toast('Ошибка сохранения: ' + e.message));
+      save().then(() => {
+        render();
+        toast(`✅ Импорт: +${added} новых, ${updated} обновлено`);
+        close('mDay'); // закрываем модал дня если открыт
+      }).catch(e => toast('Ошибка сохранения: ' + e.message));
       input.value = '';
     };
     reader.readAsText(file, 'utf-8');
