@@ -187,16 +187,41 @@ const App = (() => {
       : db.products;
 
     if (!filteredProducts.length) {
-      $('rnpEmpty').style.display = ''; $('rnpBlocks').innerHTML = ''; return;
+      $('rnpEmpty').style.display = ''; $('rnpBlocks').innerHTML = '';
+      const kpiRow = $('rnpKpi'); if(kpiRow) kpiRow.style.display = 'none';
+      return;
     }
     $('rnpEmpty').style.display = 'none';
     try {
+      // KPI-панель вверху (всегда, для всех продуктов)
+      const kpiRow = $('rnpKpi');
+      if (kpiRow) {
+        const allSkus = filteredProducts.map(p => p.sku);
+        const totF = factAllOf(monthDays, allSkus, null);
+        const totE = econAllOf(monthDays, filteredProducts, null, tax);
+        kpiRow.style.display = 'grid';
+        $('kpiOrdQ').textContent = fmt(totF.ordQ) + ' шт';
+        $('kpiOrdS').textContent = fmt(totF.ordS) + ' ₽';
+        $('kpiBuyQ').textContent = fmt(totF.buyQ) + ' шт';
+        $('kpiBuyS').textContent = fmt(totF.buyS) + ' ₽';
+        $('kpiKp').textContent = fmt(totE.kPerech) + ' ₽';
+        $('kpiMargin').textContent = 'Маржа ' + fmtP(totE.margin);
+        $('kpiProfit').textContent = fmt(totE.profit) + ' ₽';
+        $('kpiDrr').textContent = 'ДРР ' + fmtP(totE.drr);
+        $('kpiShows').textContent = fmt(totF.shows);
+        $('kpiCtr').textContent = 'CTR ' + fmtP(totF.shows>0 ? totF.clicks/totF.shows*100 : 0, 1);
+        const buyoutPct = totF.ordQ>0 ? totF.buyQ/totF.ordQ*100 : 0;
+        $('kpiBuyout').textContent = fmtP(buyoutPct, 1);
+        $('kpiStock').textContent = 'Остаток ' + fmt(totF.stock) + ' шт';
+      }
+
       let summaryHtml = '';
       if (filteredProducts.length > 1) {
         summaryHtml = buildSummaryBlock(filteredProducts, ym, weeks, daysInMonth, monthDays, monthDates, tax, usd);
       }
-      $('rnpBlocks').innerHTML = summaryHtml + filteredProducts.map(p =>
-        buildProdBlock(p, ym, weeks, daysInMonth, monthDays, monthDates, planM, tax, usd)
+      const prodSep = i => i > 0 ? `<div class="prod-sep"><span>товар ${i+1} из ${filteredProducts.length}</span></div>` : '';
+      $('rnpBlocks').innerHTML = summaryHtml + filteredProducts.map((p, i) =>
+        prodSep(i) + buildProdBlock(p, ym, weeks, daysInMonth, monthDays, monthDates, planM, tax, usd)
       ).join('');
     } catch(e) {
       $('rnpBlocks').innerHTML = `<div style="padding:40px;color:#d93025;font-size:13px">⚠️ Ошибка рендера: ${e.message}<br><pre style="font-size:11px;margin-top:8px">${e.stack}</pre></div>`;
@@ -280,16 +305,22 @@ const App = (() => {
     const wkThs = Array.from({length:WK}, (_,i) => `<th class="c-wk">Нед. ${i+1}</th>`).join('');
     const DOW = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
     const dayDow = dayNums.map(d => new Date(y, m-1, d).getDay());
+    // For summary: day has data if ANY product has data that day
+    const hasSummDates = new Set(monthDays.map(d=>d.date));
     const dayThs = dayNums.map((d, i) => {
       const date = `${ym}-${String(d).padStart(2,'0')}`;
       const dw = dayDow[i];
       const dow = DOW[dw];
+      const isPast = date < today;
+      const hasData = hasSummDates.has(date);
       const clsArr = [];
       if (date === today) clsArr.push('today-col');
+      else if (isPast && !hasData) clsArr.push('c-miss');
+      else if (hasData) clsArr.push('c-has');
       if (dw === 6) clsArr.push('c-sat');
       if (dw === 0) clsArr.push('c-sun');
       const cls = clsArr.length ? ` class="${clsArr.join(' ')}"` : '';
-      return `<th${cls} title="${date}"><span class="th-dow">${dow}</span><br>${String(d).padStart(2,'0')}</th>`;
+      return `<th${cls} title="${isPast && !hasData ? 'Нет данных' : date}"><span class="th-dow">${dow}</span><br>${String(d).padStart(2,'0')}</th>`;
     }).join('');
     const colgroup = `<colgroup>
       <col style="width:148px"><col style="width:86px"><col style="width:80px">
@@ -529,16 +560,22 @@ const App = (() => {
     const wkThs = Array.from({length:WK}, (_,i) => `<th class="c-wk">Нед. ${i+1} <span class="tip" data-tip="Итог за ${i+1}-ю неделю месяца">?</span></th>`).join('');
     const DOW = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
     const dayDow = dayNums.map(d => new Date(y, m-1, d).getDay()); // 0=sun,6=sat
+    const hasDayData = new Set(monthDays.filter(d=>d.sku===p.sku).map(d=>d.date));
     const dayThs = dayNums.map((d, i) => {
       const date = `${ym}-${String(d).padStart(2,'0')}`;
       const dw = dayDow[i];
       const dow = DOW[dw];
+      const isPast = date < today;
+      const hasData = hasDayData.has(date);
       const clsArr = [];
       if (date === today) clsArr.push('today-col');
+      else if (isPast && !hasData) clsArr.push('c-miss');
+      else if (hasData) clsArr.push('c-has');
       if (dw === 6) clsArr.push('c-sat');
       if (dw === 0) clsArr.push('c-sun');
       const cls = clsArr.length ? ` class="${clsArr.join(' ')}"` : '';
-      return `<th${cls} title="${date}" onclick="App.openDayEdit('${p.sku}', '${date}')" style="cursor:pointer"><span class="th-dow">${dow}</span><br>${String(d).padStart(2,'0')}<span class="day-edit-btn">✎</span></th>`;
+      const missTitle = isPast && !hasData ? 'Нет данных за этот день' : date;
+      return `<th${cls} title="${missTitle}" onclick="App.openDayEdit('${p.sku}', '${date}')" style="cursor:pointer"><span class="th-dow">${dow}</span><br>${String(d).padStart(2,'0')}<span class="day-edit-btn">✎</span></th>`;
     }).join('');
     const colgroup = `<colgroup>
       <col style="width:148px"><col style="width:86px"><col style="width:80px">
@@ -833,7 +870,15 @@ const App = (() => {
   // ---- Settings ----
   function renderSettings() {
     const s = db.settings||{};
-    $('apiKey').value=s.apiKey||''; $('taxRate').value=s.taxRate??7; $('usdRate').value=s.usdRate??90;
+    if($('apiKey'))  $('apiKey').value=s.apiKey||'';
+    if($('taxRate')) $('taxRate').value=s.taxRate??7;
+    if($('usdRate')) $('usdRate').value=s.usdRate??90;
+    if($('shopName')) $('shopName').value=s.shopName||'';
+    // Профиль
+    const letter = ($('topAvatar')?.textContent||'?');
+    [$('setAvatar')].forEach(el => { if(el) el.textContent = letter; });
+    if($('setPdName'))  $('setPdName').textContent  = $('topPdName')?.textContent||'—';
+    if($('setPdEmail')) $('setPdEmail').textContent = $('topPdEmail')?.textContent||'—';
     $('logBox').innerHTML=(db.log||[]).slice(0,50).map(l=>`<div>${(l.t||'').slice(0,19)} · ${esc(l.msg)}</div>`).join('');
     renderVisibility();
   }
@@ -841,19 +886,24 @@ const App = (() => {
   // ---- init ----
   async function init() {
     // Check auth
+    let meUser = null;
     try {
       const me = await fetch('/api/auth/me').then(r => r.json());
       if (!me || !me.user) { window.location.href = '/login.html'; return; }
-      // Имя пользователя в шапке
-      const ui = $('userInfo');
-      if (ui) ui.textContent = me.user.name;
-      // Аватар — первая буква имени
-      const av = $('topAvatar');
-      if (av) av.textContent = (me.user.name || '?')[0].toUpperCase();
-      // Имя магазина — из настроек или имени пользователя
-      const shopEl = $('topShopName');
-      if (shopEl) shopEl.textContent = db.settings?.shopName || me.user.name || 'Мой магазин';
+      meUser = me.user;
+      const letter = (me.user.name || '?')[0].toUpperCase();
+      // Аватар + имя в шапке
+      [$('topAvatar'),$('topAvatarDrop')].forEach(el => { if(el) el.textContent = letter; });
+      const ui = $('userInfo'); if(ui) ui.textContent = me.user.name;
+      const pdName = $('topPdName'); if(pdName) pdName.textContent = me.user.name;
+      const pdEmail = $('topPdEmail'); if(pdEmail) pdEmail.textContent = me.user.email || '';
     } catch { window.location.href = '/login.html'; return; }
+
+    // Дождаться загрузки данных чтобы получить shopName из настроек
+    await load();
+
+    const shopName = db.settings?.shopName || meUser?.name || 'Мой магазин';
+    const shopEl = $('topShopName'); if(shopEl) shopEl.textContent = shopName;
 
     _setMonth(new Date().toISOString().slice(0,7));
     document.querySelectorAll('.sheet-tab').forEach(t => t.addEventListener('click', () => {
@@ -866,7 +916,6 @@ const App = (() => {
       if(t.dataset.p==='settings') renderSettings();
     }));
     if(localStorage.getItem('theme')==='dark'){ document.body.classList.add('dark'); $('themeBtn').textContent='☀️'; }
-    await load();
     buildCategoryTabs();
     render();
   }
@@ -1089,7 +1138,10 @@ const App = (() => {
     db.settings.apiKey=$('apiKey').value.trim();
     db.settings.taxRate=+$('taxRate').value||7;
     db.settings.usdRate=+$('usdRate').value||90;
-    save(); toast('Сохранено');
+    const shopName=$('shopName')?.value.trim();
+    if(shopName!=null) db.settings.shopName=shopName;
+    const shopEl=$('topShopName'); if(shopEl) shopEl.textContent=shopName||'Мой магазин';
+    save(); toast('Сохранено ✅');
   }
   async function wbTest() {
     const key=$('apiKey').value.trim(); if(!key){$('wbMsg').textContent='⚠️ Введи API-ключ';return;}

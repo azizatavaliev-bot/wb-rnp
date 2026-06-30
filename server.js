@@ -585,11 +585,9 @@ const server = http.createServer(async (req, res) => {
     } catch(e) { return send(res, 500, { error:e.message }); }
   }
 
-  // ---- Other static files (JS/CSS — кэш 7 дней) ----
+  // ---- Other static files (JS/CSS — ETag + no-cache для гарантии обновлений) ----
   const fp = path.join(PUB, path.normalize(p).replace(/^(\.\.[/\\])+/, ''));
-  const ext = path.extname(fp);
-  const cacheSec = (ext === '.js' || ext === '.css') ? 604800 : 0;
-  return serveStatic(req, res, fp, cacheSec);
+  return serveStatic(req, res, fp, 0);
 });
 
 ensureDemoUser();
