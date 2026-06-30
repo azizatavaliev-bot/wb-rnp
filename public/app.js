@@ -858,6 +858,41 @@ const App = (() => {
     window.location.href = '/login.html';
   }
 
+  function downloadCostTemplate() {
+    const header = 'SKU,Название,Себестоимость,Цена продажи,Комиссия %,Логистика ₽,Упаковка ₽,Цел. ДРР %';
+    const rows = [header, ...db.products.map(p =>
+      [p.sku, `"${(p.name||'').replace(/"/g,'""')}"`, p.cost||0, p.price||0, p.commission||15, p.logistics||0, p.pkg||0, p.planDrr||0].join(',')
+    )];
+    const blob = new Blob(['﻿'+rows.join('\n')], {type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='себестоимость-шаблон.csv'; a.click();
+  }
+
+  function importCosts() { $('costFileInput').click(); }
+
+  function handleCostFile(input) {
+    const file = input.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = async e => {
+      const lines = e.target.result.split(/\r?\n/).filter(l=>l.trim()&&!l.startsWith('#'));
+      if(lines.length<2) return toast('Файл пустой или неверный формат');
+      const hdr = lines[0].split(',').map(s=>s.trim().toLowerCase());
+      const idx = k => hdr.findIndex(h=>h.includes(k));
+      const iSku=idx('sku'); const iCost=idx('себес'); const iPrice=idx('цена'); const iComm=idx('комис'); const iLog=idx('логис'); const iPkg=idx('упако'); const iDrr=idx('дрр');
+      if(iSku<0) return toast('Нет колонки SKU в файле');
+      const rows=[];
+      for(let i=1;i<lines.length;i++){
+        const cols=lines[i].split(','); const get=j=>j>=0?(cols[j]||'').replace(/^"|"$/g,'').trim():'';
+        const sku=get(iSku); if(!sku) continue;
+        rows.push({sku, cost:get(iCost), price:get(iPrice), commission:get(iComm), logistics:get(iLog), pkg:get(iPkg), planDrr:get(iDrr)});
+      }
+      const r=await(await fetch('/api/import/costs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows})})).json();
+      toast((r.ok?'✅ ':'❌ ')+r.msg);
+      if(r.ok){await load();render();}
+      input.value='';
+    };
+    reader.readAsText(file,'utf-8');
+  }
+
   async function loadDemo() {
     if (!confirm('Загрузить демо-данные? Текущие данные будут удалены.')) return;
     const r = await fetch('/api/load-demo', { method: 'POST' });
@@ -1043,6 +1078,16 @@ const App = (() => {
       $('wbMsg').textContent=(r.ok?'✅ ':'❌ ')+r.msg;
     } catch(e) { $('wbMsg').textContent='❌ Ошибка сети: '+e.message; }
   }
+  async function wbImportCards() {
+    const key=$('apiKey').value.trim(); if(!key){$('wbMsg').textContent='⚠️ Введи API-ключ';return;}
+    $('wbMsg').textContent='⏳ Загружаю товары из WB...';
+    try {
+      const r=await(await fetch('/api/wb/cards',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({apiKey:key})})).json();
+      $('wbMsg').textContent=(r.ok?'✅ ':'❌ ')+r.msg;
+      if(r.ok){ await load(); buildCategoryTabs(); renderProducts(); }
+    } catch(e) { $('wbMsg').textContent='❌ Ошибка: '+e.message; }
+  }
+
   async function wbSync() {
     const key=$('apiKey').value.trim();
     const dateFrom=$('dateFrom').value||new Date(Date.now()-30*864e5).toISOString().slice(0,10);
@@ -1252,7 +1297,7 @@ const App = (() => {
   }
 
   window.addEventListener('DOMContentLoaded', init);
-  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,wbTest,wbSync,theme,calcTestPrice,downloadTemplate,exportData,importCsv,handleCsvFile,shiftMonth,archiveMonth,toggleHidden,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory};
+  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,wbTest,wbSync,wbImportCards,theme,calcTestPrice,downloadTemplate,exportData,importCsv,handleCsvFile,downloadCostTemplate,importCosts,handleCostFile,shiftMonth,archiveMonth,toggleHidden,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory};
 })();
 
 // Аккордеон инструкции (глобальные функции)

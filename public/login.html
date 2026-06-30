@@ -138,10 +138,7 @@ async function register(name, email, pass) {
   if (d.ok) window.location.href = '/'; else showErr(d.msg || 'Ошибка регистрации');
 }
 async function tryDemo() {
-  showErr('');
-  spin('lSpin', true); spin('rSpin', true);
-  await login('demo@rnp.ru', 'demo123');
-  spin('lSpin', false); spin('rSpin', false);
+  window.location.href = '/demo';
 }
 async function doLogin() {
   showErr('');

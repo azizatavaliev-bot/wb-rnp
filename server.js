@@ -208,10 +208,30 @@ function ensureDemoUser() {
 
 // ---- WB Statistics API ----
 const WB_BASE = 'https://statistics-api.wildberries.ru';
-async function wbGet(key, urlPath) {
-  const res = await fetch(WB_BASE + urlPath, { headers: { Authorization: key } });
+const WB_CONTENT = 'https://content-api.wildberries.ru';
+async function wbGet(key, urlPath, base) {
+  const res = await fetch((base||WB_BASE) + urlPath, { headers: { Authorization: 'Bearer ' + key.replace(/^Bearer\s*/i,'') } });
   if (!res.ok) throw new Error('WB ' + res.status + ' ' + (await res.text()).slice(0, 200));
   return res.json();
+}
+
+// ---- WB Content API: fetch product cards ----
+async function wbGetCards(key) {
+  const token = key.replace(/^Bearer\s*/i,'');
+  let cards = [], cursor = {};
+  for (let i = 0; i < 20; i++) { // max 20 pages × 100 = 2000 cards
+    const body = JSON.stringify({ settings:{ cursor: { ...cursor, limit:100 }, filter:{ withPhoto:-1 } } });
+    const res = await fetch(WB_CONTENT + '/content/v2/get/cards/list', {
+      method:'POST', headers:{ Authorization:'Bearer '+token, 'Content-Type':'application/json' }, body
+    });
+    if (!res.ok) break;
+    const d = await res.json();
+    const batch = d.cards || [];
+    cards = cards.concat(batch);
+    if (!d.cursor || batch.length < 100) break;
+    cursor = { updatedAt: d.cursor.updatedAt, nmID: d.cursor.nmID };
+  }
+  return cards;
 }
 
 async function wbSync(db, key, dateFrom) {
@@ -431,6 +451,55 @@ const server = http.createServer(async (req, res) => {
         const file = path.join(ARC_DIR, (ym||'')+'.json');
         if (!ym || !fs.existsSync(file)) return send(res, 404, { error:'not found' });
         return send(res, 200, JSON.parse(fs.readFileSync(file, 'utf8')));
+      }
+
+      // ---- WB: import product cards ----
+      if (p === '/api/wb/cards' && req.method === 'POST') {
+        const b = await body(req);
+        const key = b.apiKey || db.settings.apiKey;
+        if (!key) return send(res, 200, { ok:false, msg:'Нет API-ключа WB' });
+        try {
+          const cards = await wbGetCards(key);
+          let added = 0, updated = 0;
+          cards.forEach(card => {
+            const sku = card.vendorCode || String(card.nmID);
+            const name = (card.title || card.subjectName || sku).slice(0, 80);
+            const nmId = String(card.nmID || '');
+            const price = card.sizes?.[0]?.price || 0;
+            const existing = db.products.find(p => p.sku === sku || p.wbId === nmId);
+            if (existing) {
+              existing.name = existing.name || name;
+              existing.wbId = existing.wbId || nmId;
+              updated++;
+            } else {
+              db.products.push({ id:'wb'+nmId, sku, wbId:nmId, name, cost:0, pkg:0, commission:15, logistics:80, buyout:75, price, manager:'', status:'НЕ ВЫБРАНО', planDrr:15, category:'' });
+              added++;
+            }
+          });
+          if (b.apiKey) db.settings.apiKey = b.apiKey;
+          saveUserDB(userId, db);
+          return send(res, 200, { ok:true, added, updated, total:cards.length, msg:`Загружено ${cards.length} товаров: +${added} новых, ${updated} обновлено` });
+        } catch(e) { return send(res, 200, { ok:false, msg:'Ошибка WB API: ' + e.message }); }
+      }
+
+      // ---- Import cost prices from CSV ----
+      if (p === '/api/import/costs' && req.method === 'POST') {
+        const b = await body(req);
+        const rows = b.rows || []; // [{sku, cost, price, commission, logistics, pkg}]
+        let updated = 0;
+        rows.forEach(r => {
+          const prod = db.products.find(p => p.sku === r.sku || p.wbId === r.sku || p.name === r.sku);
+          if (!prod) return;
+          if (r.cost      !== undefined && r.cost      !== '') prod.cost       = parseFloat(r.cost)||0;
+          if (r.price     !== undefined && r.price     !== '') prod.price      = parseFloat(r.price)||0;
+          if (r.commission!== undefined && r.commission!== '') prod.commission = parseFloat(r.commission)||0;
+          if (r.logistics !== undefined && r.logistics !== '') prod.logistics  = parseFloat(r.logistics)||0;
+          if (r.pkg       !== undefined && r.pkg       !== '') prod.pkg        = parseFloat(r.pkg)||0;
+          if (r.planDrr   !== undefined && r.planDrr   !== '') prod.planDrr   = parseFloat(r.planDrr)||0;
+          updated++;
+        });
+        saveUserDB(userId, db);
+        return send(res, 200, { ok:true, updated, msg:`Обновлено ${updated} товаров` });
       }
 
       return send(res, 404, { error:'not found' });
