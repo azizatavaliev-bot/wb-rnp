@@ -319,6 +319,13 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { user: { id:sess.userId, email:sess.email, name:sess.name } });
   }
 
+  if (p === '/api/load-demo' && req.method === 'POST') {
+    const sess = getSession(req);
+    if (!sess) return send(res, 401, { error: 'unauthorized' });
+    seedUserDemo(sess.userId);
+    return send(res, 200, { ok:true });
+  }
+
   // ---- Demo auto-login ----
   if (p === '/demo') {
     const users = loadUsers();

@@ -847,6 +847,13 @@ const App = (() => {
     window.location.href = '/login.html';
   }
 
+  async function loadDemo() {
+    if (!confirm('Загрузить демо-данные? Текущие данные будут удалены.')) return;
+    const r = await fetch('/api/load-demo', { method: 'POST' });
+    if (r.ok) { await load(); buildCategoryTabs(); render(); }
+    else alert('Ошибка загрузки демо');
+  }
+
   function render() { renderRnp(); }
 
   // ---- CRUD ----
@@ -1205,7 +1212,7 @@ const App = (() => {
   }
 
   window.addEventListener('DOMContentLoaded', init);
-  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,wbTest,wbSync,theme,calcTestPrice,downloadTemplate,importCsv,handleCsvFile,shiftMonth,archiveMonth,toggleHidden,switchTo,logout,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory};
+  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,wbTest,wbSync,theme,calcTestPrice,downloadTemplate,importCsv,handleCsvFile,shiftMonth,archiveMonth,toggleHidden,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory};
 })();
 
 // Аккордеон инструкции (глобальные функции)

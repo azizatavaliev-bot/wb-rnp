@@ -49,7 +49,15 @@
 <div class="page active" id="p-rnp">
   <div id="rnpBlocks"></div>
   <div class="empty" id="rnpEmpty" style="display:none">
-    Добавь товары во вкладке «🏷 Товары и план», затем нажми «＋ Добавить день» для ввода данных.
+    <div style="text-align:center;padding:60px 20px">
+      <div style="font-size:48px;margin-bottom:16px">📊</div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:8px;color:var(--fg)">Нет товаров</div>
+      <div style="font-size:14px;color:var(--muted);margin-bottom:28px">Добавь товар во вкладке «Товары и план» или попробуй демо-режим</div>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        <button class="btn" onclick="App.switchTo('p-products')" style="font-size:14px;padding:12px 24px">🏷 Добавить товар</button>
+        <button class="btn ghost" onclick="App.loadDemo()" style="font-size:14px;padding:12px 24px">🎯 Загрузить демо-данные</button>
+      </div>
+    </div>
   </div>
 </div>
 
