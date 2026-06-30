@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>РНП · Рука на пульсе</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260703">
+<link rel="stylesheet" href="style.css?v=20260704">
 </head>
 <body>
 <div class="top">
@@ -98,16 +98,28 @@ document.addEventListener('click', e => {
 <!-- ===== РНП ===== -->
 <div class="page active" id="p-rnp">
 
+  <!-- Шапка с месяцем и кнопкой плана -->
+  <div class="rnp-plan-header" id="rnpPlanHeader" style="display:none">
+    <div class="rnp-plan-month" id="rnpPlanMonth">Июнь 2026</div>
+    <button class="btn sm ghost rnp-plan-btn" onclick="App.openMonthPlan()">🎯 Установить план</button>
+  </div>
+
   <!-- Сводные KPI-карточки вверху -->
   <div class="rnp-kpi-row" id="rnpKpi" style="display:none">
     <div class="rnp-kpi-card">
-      <div class="rnp-kpi-label">📦 Заказы</div>
+      <div class="rnp-kpi-label">📦 Заказы, шт</div>
       <div class="rnp-kpi-val" id="kpiOrdQ">—</div>
       <div class="rnp-kpi-sub" id="kpiOrdS">—</div>
       <div id="kpiOrdBar"></div>
     </div>
     <div class="rnp-kpi-card">
-      <div class="rnp-kpi-label">✅ Продажи (выкупы)</div>
+      <div class="rnp-kpi-label">💳 Оборот ₽</div>
+      <div class="rnp-kpi-val" id="kpiOrdSVal">—</div>
+      <div class="rnp-kpi-sub" id="kpiOrdSHint">выручка</div>
+      <div id="kpiOrdSBar"></div>
+    </div>
+    <div class="rnp-kpi-card">
+      <div class="rnp-kpi-label">✅ Выкупы, шт</div>
       <div class="rnp-kpi-val" id="kpiBuyQ">—</div>
       <div class="rnp-kpi-sub" id="kpiBuyS">—</div>
       <div id="kpiBuyBar"></div>
@@ -116,16 +128,13 @@ document.addEventListener('click', e => {
       <div class="rnp-kpi-label">💰 К перечислению</div>
       <div class="rnp-kpi-val" id="kpiKp">—</div>
       <div class="rnp-kpi-sub" id="kpiMargin">—</div>
+      <div id="kpiKpBar"></div>
     </div>
     <div class="rnp-kpi-card">
-      <div class="rnp-kpi-label">🎯 Прибыль</div>
+      <div class="rnp-kpi-label">🎯 Чистая прибыль</div>
       <div class="rnp-kpi-val" id="kpiProfit">—</div>
       <div class="rnp-kpi-sub" id="kpiDrr">—</div>
-    </div>
-    <div class="rnp-kpi-card">
-      <div class="rnp-kpi-label">👁 Показы</div>
-      <div class="rnp-kpi-val" id="kpiShows">—</div>
-      <div class="rnp-kpi-sub" id="kpiCtr">—</div>
+      <div id="kpiProfitBar"></div>
     </div>
     <div class="rnp-kpi-card">
       <div class="rnp-kpi-label">🛒 Выкуп %</div>
@@ -887,6 +896,41 @@ document.addEventListener('click', e => {
   </div>
 </div></div>
 
+<!-- MODAL: план месяца -->
+<div class="modal" id="mMonthPlan"><div class="sheet" style="max-width:480px">
+  <button class="modal-close" onclick="App.close('mMonthPlan')">✕</button>
+  <h2 style="margin:0 0 6px">🎯 План на месяц</h2>
+  <p style="font-size:12px;color:var(--muted);margin:0 0 20px" id="mPlanSubtitle">Установи цели — система покажет % выполнения в реальном времени</p>
+
+  <div class="plan-modal-grid">
+    <div class="fld">
+      <label>📦 Заказы, шт <span class="tip" data-tip="Сколько заказов планируешь получить за месяц">?</span></label>
+      <input type="number" id="planOrdQ" min="0" placeholder="например 5000">
+    </div>
+    <div class="fld">
+      <label>💳 Оборот (заказы), ₽ <span class="tip" data-tip="Плановая сумма заказов за месяц">?</span></label>
+      <input type="number" id="planOrdS" min="0" placeholder="например 7 000 000">
+    </div>
+    <div class="fld">
+      <label>✅ Выкупы, шт <span class="tip" data-tip="Плановое количество выкупов = заказы × % выкупа">?</span></label>
+      <input type="number" id="planBuyQ" min="0" placeholder="например 3800">
+    </div>
+    <div class="fld">
+      <label>💰 К перечислению, ₽ <span class="tip" data-tip="Сумма которую WB перечислит = выкупы − комиссия − логистика">?</span></label>
+      <input type="number" id="planKp" min="0" placeholder="например 5 000 000">
+    </div>
+    <div class="fld" style="grid-column:1/-1">
+      <label>🎯 Чистая прибыль, ₽ <span class="tip" data-tip="К перечислению − себестоимость − реклама − налог">?</span></label>
+      <input type="number" id="planProfit" min="0" placeholder="например 1 500 000">
+    </div>
+  </div>
+
+  <div class="sheet-act">
+    <button class="btn ghost" onclick="App.close('mMonthPlan')">Отмена</button>
+    <button class="btn" onclick="App.saveMonthPlan()">💾 Сохранить план</button>
+  </div>
+</div></div>
+
 <!-- ТАБЫ ВНИЗУ как в Google Sheets -->
 <div class="sheet-tabs" id="sheetTabs">
   <button class="sheet-tab active" data-p="rnp">📊 Сводная</button>
@@ -897,6 +941,6 @@ document.addEventListener('click', e => {
 </div>
 
 <div class="toast" id="toast"></div>
-<script src="app.js?v=20260703"></script>
+<script src="app.js?v=20260704"></script>
 </body>
 </html>

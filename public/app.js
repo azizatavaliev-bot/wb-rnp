@@ -193,45 +193,50 @@ const App = (() => {
     }
     $('rnpEmpty').style.display = 'none';
     try {
-      // KPI-панель вверху (всегда, для всех продуктов)
+      // KPI-панель вверху
       const kpiRow = $('rnpKpi');
+      const planHeader = $('rnpPlanHeader');
       if (kpiRow) {
         const allSkus = filteredProducts.map(p => p.sku);
         const totF = factAllOf(monthDays, allSkus, null);
         const totE = econAllOf(monthDays, filteredProducts, null, tax);
 
-        // Суммируем планы по всем товарам за этот месяц
-        const planOrdQ = filteredProducts.reduce((s, p) => s + (+((planM[p.sku]||{}).ordQ)||0), 0);
-        const planBuyQ = filteredProducts.reduce((s, p) => s + (+((planM[p.sku]||{}).buyQ)||0), 0);
-        const planOrdS = filteredProducts.reduce((s, p) => s + (+((planM[p.sku]||{}).ordS)||0), 0);
+        // Общий план месяца (из настроек)
+        const mp = (db.settings.monthPlan || {})[ym] || {};
 
-        const pctOrdQ = planOrdQ > 0 ? clamp(totF.ordQ / planOrdQ * 100, 0, 200) : null;
-        const pctBuyQ = planBuyQ > 0 ? clamp(totF.buyQ / planBuyQ * 100, 0, 200) : null;
-        const pctOrdS = planOrdS > 0 ? clamp(totF.ordS / planOrdS * 100, 0, 200) : null;
-
-        function kpiBar(pct) {
-          if (pct == null) return '';
+        function kpiBar(fact, plan) {
+          if (!plan) return '';
+          const pct = clamp(fact / plan * 100, 0, 200);
           const color = pct >= 100 ? '#43a047' : pct >= 70 ? '#f57c00' : '#e53935';
           const w = Math.min(pct, 100);
-          const label = pct >= 100 ? '✅ ' + fmt(pct,0) + '%' : fmt(pct,0) + '%';
-          return `<div class="kpi-plan-bar"><div class="kpi-plan-fill" style="width:${w}%;background:${color}"></div></div><div class="kpi-plan-pct" style="color:${color}">${label} плана</div>`;
+          const icon = pct >= 100 ? '✅' : pct >= 70 ? '⚠️' : '🔴';
+          return `<div class="kpi-plan-bar"><div class="kpi-plan-fill" style="width:${w}%;background:${color}"></div></div><div class="kpi-plan-pct" style="color:${color}">${icon} ${fmt(pct,0)}% плана · цель ${fmt(plan)}</div>`;
         }
 
         kpiRow.style.display = 'grid';
+        if (planHeader) planHeader.style.display = 'flex';
+        if ($('rnpPlanMonth')) $('rnpPlanMonth').textContent = new Date(y, m-1).toLocaleString('ru', {month:'long', year:'numeric'});
+
         $('kpiOrdQ').textContent = fmt(totF.ordQ) + ' шт';
-        $('kpiOrdS').innerHTML = fmt(totF.ordS) + ' ₽' + (planOrdS > 0 ? `<span class="kpi-plan-hint">план ${fmt(planOrdS)} ₽</span>` : '');
-        $('kpiOrdBar').innerHTML = kpiBar(pctOrdQ || pctOrdS);
+        $('kpiOrdS').textContent = fmt(totF.ordS) + ' ₽';
+        $('kpiOrdBar').innerHTML = kpiBar(totF.ordQ, mp.ordQ);
+
+        $('kpiOrdSVal').textContent = fmt(totF.ordS) + ' ₽';
+        $('kpiOrdSHint').textContent = fmt(totF.buyS) + ' ₽ продаж';
+        $('kpiOrdSBar').innerHTML = kpiBar(totF.ordS, mp.ordS);
 
         $('kpiBuyQ').textContent = fmt(totF.buyQ) + ' шт';
         $('kpiBuyS').textContent = fmt(totF.buyS) + ' ₽';
-        $('kpiBuyBar').innerHTML = kpiBar(pctBuyQ);
+        $('kpiBuyBar').innerHTML = kpiBar(totF.buyQ, mp.buyQ);
 
         $('kpiKp').textContent = fmt(totE.kPerech) + ' ₽';
         $('kpiMargin').textContent = 'Маржа ' + fmtP(totE.margin);
+        $('kpiKpBar').innerHTML = kpiBar(totE.kPerech, mp.kp);
+
         $('kpiProfit').textContent = fmt(totE.profit) + ' ₽';
         $('kpiDrr').textContent = 'ДРР ' + fmtP(totE.drr);
-        $('kpiShows').textContent = fmt(totF.shows);
-        $('kpiCtr').textContent = 'CTR ' + fmtP(totF.shows>0 ? totF.clicks/totF.shows*100 : 0, 1);
+        $('kpiProfitBar').innerHTML = kpiBar(totE.profit, mp.profit);
+
         const buyoutPct = totF.ordQ>0 ? totF.buyQ/totF.ordQ*100 : 0;
         $('kpiBuyout').textContent = fmtP(buyoutPct, 1);
         $('kpiStock').textContent = 'Остаток ' + fmt(totF.stock) + ' шт';
@@ -1156,6 +1161,33 @@ const App = (() => {
   function close(id){$(id).classList.remove('open');}
 
   // ---- Settings actions ----
+  function openMonthPlan() {
+    const ym = curMonth();
+    const mp = (db.settings.monthPlan || {})[ym] || {};
+    const [y, m] = ym.split('-').map(Number);
+    const monthName = new Date(y, m-1).toLocaleString('ru', {month:'long', year:'numeric'});
+    $('mPlanSubtitle').textContent = `${monthName} — установи цели, следи за выполнением`;
+    $('planOrdQ').value  = mp.ordQ  || '';
+    $('planOrdS').value  = mp.ordS  || '';
+    $('planBuyQ').value  = mp.buyQ  || '';
+    $('planKp').value    = mp.kp    || '';
+    $('planProfit').value= mp.profit|| '';
+    $('mMonthPlan').classList.add('open');
+  }
+
+  function saveMonthPlan() {
+    const ym = curMonth();
+    if (!db.settings.monthPlan) db.settings.monthPlan = {};
+    db.settings.monthPlan[ym] = {
+      ordQ:   +$('planOrdQ').value  || 0,
+      ordS:   +$('planOrdS').value  || 0,
+      buyQ:   +$('planBuyQ').value  || 0,
+      kp:     +$('planKp').value    || 0,
+      profit: +$('planProfit').value|| 0,
+    };
+    save(); close('mMonthPlan'); render(); toast('План сохранён ✅');
+  }
+
   function saveSettings() {
     db.settings.apiKey=$('apiKey').value.trim();
     db.settings.taxRate=+$('taxRate').value||7;
@@ -1413,7 +1445,7 @@ const App = (() => {
   }
 
   window.addEventListener('DOMContentLoaded', init);
-  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,wbTest,wbSync,wbImportCards,theme,calcTestPrice,downloadTemplate,exportData,importCsv,handleCsvFile,downloadCostTemplate,importCosts,handleCostFile,shiftMonth,archiveMonth,toggleHidden,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory};
+  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,wbTest,wbSync,wbImportCards,theme,calcTestPrice,downloadTemplate,exportData,importCsv,handleCsvFile,downloadCostTemplate,importCosts,handleCostFile,shiftMonth,archiveMonth,toggleHidden,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory,openMonthPlan,saveMonthPlan};
 })();
 
 // Аккордеон инструкции (глобальные функции)
