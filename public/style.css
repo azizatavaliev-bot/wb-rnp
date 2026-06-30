@@ -858,6 +858,8 @@ body.dark .ph-name-sum { background: #0a2f7a !important; }
 /* День недели в шапке колонок */
 .th-dow { font-size: 9px; font-weight: 400; display: block; opacity: .65; line-height: 1.2; }
 th.c-sat .th-dow, th.c-sun .th-dow { opacity: 1; font-weight: 700; color: #ff6b6b; }
+.th-day { font-size: 11px; font-weight: 700; }
+.th-mon { font-size: 9px; opacity: .55; }
 
 /* Шапка инструкции */
 .help-hero-bar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:18px 20px; background:var(--bg2); border-radius:10px; margin-bottom:14px; border:1px solid var(--line); }

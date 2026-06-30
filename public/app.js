@@ -320,7 +320,7 @@ const App = (() => {
       if (dw === 6) clsArr.push('c-sat');
       if (dw === 0) clsArr.push('c-sun');
       const cls = clsArr.length ? ` class="${clsArr.join(' ')}"` : '';
-      return `<th${cls} title="${isPast && !hasData ? 'Нет данных' : date}"><span class="th-dow">${dow}</span><br>${String(d).padStart(2,'0')}</th>`;
+      return `<th${cls} title="${isPast && !hasData ? 'Нет данных' : date}"><span class="th-dow">${dow}</span><br><span class="th-day">${String(d).padStart(2,'0')}</span><span class="th-mon">.${String(m).padStart(2,'0')}</span></th>`;
     }).join('');
     const colgroup = `<colgroup>
       <col style="width:148px"><col style="width:86px"><col style="width:80px">
@@ -575,7 +575,7 @@ const App = (() => {
       if (dw === 0) clsArr.push('c-sun');
       const cls = clsArr.length ? ` class="${clsArr.join(' ')}"` : '';
       const missTitle = isPast && !hasData ? 'Нет данных за этот день' : date;
-      return `<th${cls} title="${missTitle}" onclick="App.openDayEdit('${p.sku}', '${date}')" style="cursor:pointer"><span class="th-dow">${dow}</span><br>${String(d).padStart(2,'0')}<span class="day-edit-btn">✎</span></th>`;
+      return `<th${cls} title="${missTitle}" onclick="App.openDayEdit('${p.sku}', '${date}')" style="cursor:pointer"><span class="th-dow">${dow}</span><br><span class="th-day">${String(d).padStart(2,'0')}</span><span class="th-mon">.${String(m).padStart(2,'0')}</span><span class="day-edit-btn">✎</span></th>`;
     }).join('');
     const colgroup = `<colgroup>
       <col style="width:148px"><col style="width:86px"><col style="width:80px">
