@@ -199,11 +199,33 @@ const App = (() => {
         const allSkus = filteredProducts.map(p => p.sku);
         const totF = factAllOf(monthDays, allSkus, null);
         const totE = econAllOf(monthDays, filteredProducts, null, tax);
+
+        // Суммируем планы по всем товарам за этот месяц
+        const planOrdQ = filteredProducts.reduce((s, p) => s + (+((planM[p.sku]||{}).ordQ)||0), 0);
+        const planBuyQ = filteredProducts.reduce((s, p) => s + (+((planM[p.sku]||{}).buyQ)||0), 0);
+        const planOrdS = filteredProducts.reduce((s, p) => s + (+((planM[p.sku]||{}).ordS)||0), 0);
+
+        const pctOrdQ = planOrdQ > 0 ? clamp(totF.ordQ / planOrdQ * 100, 0, 200) : null;
+        const pctBuyQ = planBuyQ > 0 ? clamp(totF.buyQ / planBuyQ * 100, 0, 200) : null;
+        const pctOrdS = planOrdS > 0 ? clamp(totF.ordS / planOrdS * 100, 0, 200) : null;
+
+        function kpiBar(pct) {
+          if (pct == null) return '';
+          const color = pct >= 100 ? '#43a047' : pct >= 70 ? '#f57c00' : '#e53935';
+          const w = Math.min(pct, 100);
+          const label = pct >= 100 ? '✅ ' + fmt(pct,0) + '%' : fmt(pct,0) + '%';
+          return `<div class="kpi-plan-bar"><div class="kpi-plan-fill" style="width:${w}%;background:${color}"></div></div><div class="kpi-plan-pct" style="color:${color}">${label} плана</div>`;
+        }
+
         kpiRow.style.display = 'grid';
         $('kpiOrdQ').textContent = fmt(totF.ordQ) + ' шт';
-        $('kpiOrdS').textContent = fmt(totF.ordS) + ' ₽';
+        $('kpiOrdS').innerHTML = fmt(totF.ordS) + ' ₽' + (planOrdS > 0 ? `<span class="kpi-plan-hint">план ${fmt(planOrdS)} ₽</span>` : '');
+        $('kpiOrdBar').innerHTML = kpiBar(pctOrdQ || pctOrdS);
+
         $('kpiBuyQ').textContent = fmt(totF.buyQ) + ' шт';
         $('kpiBuyS').textContent = fmt(totF.buyS) + ' ₽';
+        $('kpiBuyBar').innerHTML = kpiBar(pctBuyQ);
+
         $('kpiKp').textContent = fmt(totE.kPerech) + ' ₽';
         $('kpiMargin').textContent = 'Маржа ' + fmtP(totE.margin);
         $('kpiProfit').textContent = fmt(totE.profit) + ' ₽';
