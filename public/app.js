@@ -878,20 +878,34 @@ const App = (() => {
 
   function renderVisibility() {
     const h = db.settings.hidden || {};
-    $('visRows').innerHTML = VIS_ROWS.map(r => `
-      <label class="vis-row${r.type==='sec'?' vis-sec':''}">
-        <input type="checkbox" ${h[r.key]?'':'checked'} onchange="App.toggleHidden('${r.key}',!this.checked)">
-        ${r.label}
-      </label>`).join('');
+    $('visRows').innerHTML = VIS_ROWS.map(r => {
+      const checked = !h[r.key];
+      const cls = 'vis-row' + (r.type === 'sec' ? ' vis-sec' : '');
+      return `<label class="${cls}">
+        <span>${r.label}</span>
+        <span class="vis-toggle">
+          <input type="checkbox" ${checked ? 'checked' : ''} onchange="App.toggleHidden('${r.key}',!this.checked)">
+          <span class="vis-slider"></span>
+        </span>
+      </label>`;
+    }).join('');
   }
 
   function toggleHidden(key, hide) {
     if (!db.settings.hidden) db.settings.hidden = {};
     if (hide) db.settings.hidden[key] = true;
     else delete db.settings.hidden[key];
-    save();
-    renderVisibility();
-    render();
+    save(); renderVisibility(); render();
+  }
+
+  function setAllVisibility(show) {
+    if (!db.settings.hidden) db.settings.hidden = {};
+    if (show) {
+      VIS_ROWS.forEach(r => delete db.settings.hidden[r.key]);
+    } else {
+      VIS_ROWS.forEach(r => { db.settings.hidden[r.key] = true; });
+    }
+    save(); renderVisibility(); render();
   }
 
   // ---- Settings ----
@@ -1004,7 +1018,13 @@ const App = (() => {
     if($('apStatus')) $('apStatus').value = '';
     if($('apSizesStock')) $('apSizesStock').value = '';
     if($('apSizesTransit')) $('apSizesTransit').value = '';
-    delete $('apSku').dataset.editId; // ensure create mode
+    delete $('apSku').dataset.editId;
+    // Populate category datalist from existing products
+    const dl = $('categoryDatalist');
+    if (dl) {
+      const cats = [...new Set(db.products.map(p => p.category).filter(Boolean))].sort();
+      dl.innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
+    }
     $('mAddProd').classList.add('open');
   }
   function parseSizes(stockStr, transitStr) {
@@ -1554,7 +1574,7 @@ const App = (() => {
   }
 
   window.addEventListener('DOMContentLoaded', init);
-  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,wbTest,wbSync,wbImportCards,theme,calcTestPrice,downloadTemplate,exportData,importCsv,handleCsvFile,downloadCostTemplate,importCosts,handleCostFile,shiftMonth,archiveMonth,toggleHidden,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory,openMonthPlan,saveMonthPlan,renderDayCal,dayCalShift,dayCalPick};
+  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,wbTest,wbSync,wbImportCards,theme,calcTestPrice,downloadTemplate,exportData,importCsv,handleCsvFile,downloadCostTemplate,importCosts,handleCostFile,shiftMonth,archiveMonth,toggleHidden,setAllVisibility,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory,openMonthPlan,saveMonthPlan,renderDayCal,dayCalShift,dayCalPick};
 })();
 
 // Аккордеон инструкции (глобальные функции)

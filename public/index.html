@@ -6,7 +6,7 @@
 <title>RNP Fadamos</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a73e8'/%3E%3Ctext x='16' y='22' font-family='Arial,sans-serif' font-size='13' font-weight='900' fill='white' text-anchor='middle' letter-spacing='-0.5'%3ERNP%3C/text%3E%3C/svg%3E">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260705">
+<link rel="stylesheet" href="style.css?v=20260706">
 </head>
 <body>
 <div class="top">
@@ -379,12 +379,13 @@ document.addEventListener('click', e => {
     </div>
   </div>
 
-  <!-- Секция: Параметры расчётов -->
+  <!-- Секция: Параметры расчётов + Видимость -->
   <div class="set-section">
-    <div class="set-section-label">🧮 Параметры расчётов</div>
-    <div class="set-grid">
+    <div class="set-section-label">🧮 Параметры и отображение</div>
+    <div class="set-grid set-grid--3">
 
-      <div class="set-card">
+      <!-- Налог и валюта -->
+      <div class="set-card set-card--tall">
         <div class="set-card-head">
           <div class="set-card-icon-wrap" style="background:linear-gradient(135deg,#f57c00,#ff9800)">📊</div>
           <div>
@@ -393,16 +394,16 @@ document.addEventListener('click', e => {
           </div>
         </div>
         <div class="set-card-body">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-            <div class="fld">
-              <label>Налог % <span class="tip" data-tip="УСН 6% или УСН 15% или ОСНО 20%. Вычитается из суммы к перечислению">?</span></label>
-              <input type="number" id="taxRate" min="0" max="50" step="0.1">
-              <div style="font-size:10px;color:var(--muted);margin-top:3px">УСН 6% / УСН 15% / ОСНО 20%</div>
+          <div class="tax-grid">
+            <div class="tax-field">
+              <div class="tax-label">Налог %</div>
+              <input type="number" id="taxRate" class="tax-input" min="0" max="50" step="0.1" placeholder="7">
+              <div class="tax-hint">УСН 6% · УСН 15% · ОСНО 20%</div>
             </div>
-            <div class="fld">
-              <label>Курс USD ₽ <span class="tip" data-tip="Используется чтобы показать К перечислению в долларах">?</span></label>
-              <input type="number" id="usdRate" min="1" step="0.01">
-              <div style="font-size:10px;color:var(--muted);margin-top:3px">Для отображения в $</div>
+            <div class="tax-field">
+              <div class="tax-label">Курс USD ₽</div>
+              <input type="number" id="usdRate" class="tax-input" min="1" step="0.01" placeholder="90">
+              <div class="tax-hint">Для отображения в $</div>
             </div>
           </div>
           <div class="set-actions" style="margin-top:16px">
@@ -411,17 +412,21 @@ document.addEventListener('click', e => {
         </div>
       </div>
 
-      <!-- Видимость строк -->
-      <div class="set-card">
+      <!-- Видимость строк — полная ширина -->
+      <div class="set-card set-card--vis">
         <div class="set-card-head">
           <div class="set-card-icon-wrap" style="background:linear-gradient(135deg,#1565c0,#1a73e8)">👁</div>
           <div>
-            <div class="set-card-title">Видимость строк</div>
-            <div class="set-card-sub">Скрой ненужные секции в таблице</div>
+            <div class="set-card-title">Видимость строк в таблице</div>
+            <div class="set-card-sub">Включай или скрывай секции и отдельные строки</div>
+          </div>
+          <div class="vis-quick-btns">
+            <button class="btn ghost sm" onclick="App.setAllVisibility(true)">✅ Все</button>
+            <button class="btn ghost sm" onclick="App.setAllVisibility(false)">❌ Скрыть</button>
           </div>
         </div>
         <div class="set-card-body">
-          <div id="visRows" style="display:flex;flex-direction:column;gap:6px"></div>
+          <div id="visRows" class="vis-grid"></div>
         </div>
       </div>
 
@@ -885,7 +890,7 @@ document.addEventListener('click', e => {
         </select>
       </div>
       <div class="fld"><label>Ответственный</label><input id="apManager" placeholder="Имя менеджера"></div>
-      <div class="fld"><label>Категория</label><input id="apCategory" placeholder="напр. ПЛАТЬЯ, ВЕРХ, НИЗ, ВЕТРОВКИ"></div>
+      <div class="fld"><label>Категория</label><input id="apCategory" list="categoryDatalist" placeholder="напр. ПЛАТЬЯ, ВЕРХ, НИЗ, ВЕТРОВКИ" autocomplete="off"><datalist id="categoryDatalist"></datalist></div>
     </div>
   </div>
 
@@ -961,6 +966,6 @@ document.addEventListener('click', e => {
 </div>
 
 <div class="toast" id="toast"></div>
-<script src="app.js?v=20260705"></script>
+<script src="app.js?v=20260706"></script>
 </body>
 </html>
