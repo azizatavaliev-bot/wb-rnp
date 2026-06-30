@@ -1099,46 +1099,152 @@ const App = (() => {
 
   // ---- Day modal ----
   function openDay(sku) {
-    $('dayTitle').textContent='Данные за день';
-    $('dId').value='';
-    $('dayDate').value=new Date().toISOString().slice(0,10);
-    // populate daySku select
-    const skuSel=$('daySku');
-    skuSel.innerHTML='<option value="">— выбери товар —</option>'+db.products.map(p=>`<option value="${esc(p.sku)}">${esc(p.name||p.sku)}</option>`).join('');
-    if(sku) skuSel.value=sku;
-    ['dayStock','dayOrdQ','dayOrdS','dayBuyQ','dayBuyS','dayShows','dayClicks','dayCart','dayAdsShows','dayAdsClicks','dayAdsSpend','daySpp','dayGiveaway','dayReturnQ','dayStorageCost']
-      .forEach(id=>{ const el=$(id); if(el)el.value=''; });
-    $('skuList').innerHTML=db.products.map(p=>`<option value="${esc(p.sku)}">${esc(p.name||p.sku)}</option>`).join('');
+    $('dayTitle').textContent = 'Данные за день';
+    $('dId').value = '';
+    const today = new Date().toISOString().slice(0, 10);
+    $('dayDate').value = today;
+    _dayCalYm = today.slice(0, 7);
+    const skuSel = $('daySku');
+    skuSel.innerHTML = '<option value="">— выбери товар —</option>' + db.products.map(p=>`<option value="${esc(p.sku)}">${esc(p.name||p.sku)}</option>`).join('');
+    if (sku) skuSel.value = sku;
+    ['dayStock','dayOrdQ','dayOrdS','dayBuyQ','dayBuyS','dayShows','dayClicks','dayCart',
+     'dayAdsShows','dayAdsClicks','dayAdsSpend','dayAdsOrdQ','dayAdsCart',
+     'daySpp','dayGiveaway','dayReturnQ','dayStorageCost']
+      .forEach(id => { const el=$(id); if(el) el.value=''; });
+    $('skuList').innerHTML = db.products.map(p=>`<option value="${esc(p.sku)}">${esc(p.name||p.sku)}</option>`).join('');
+    _updateDaySelBar(today);
     $('mDay').classList.add('open');
+    renderDayCal();
+    _initDayDrop();
   }
   function openDayEdit(sku, date) {
-    const existing = db.days.find(d => d.sku === sku && d.date === date);
     openDay(sku);
     setTimeout(() => {
       $('dayDate').value = date;
       $('daySku').value = sku;
+      _dayCalYm = date.slice(0, 7);
+      const existing = db.days.find(d => d.sku === sku && d.date === date);
       if (existing) {
         $('dId').value = existing.id || '';
-        $('dayOrdQ').value = existing.ordQ || '';
-        $('dayOrdS').value = existing.ordS || '';
-        $('dayBuyQ').value = existing.buyQ || '';
-        $('dayBuyS').value = existing.buyS || '';
-        $('dayShows').value = existing.shows || '';
-        $('dayClicks').value = existing.clicks || '';
-        $('dayCart').value = existing.cart || '';
-        $('dayStock').value = existing.stock || '';
-        $('dayAdsShows').value = existing.adsShows || '';
-        $('dayAdsClicks').value = existing.adsClicks || '';
-        $('dayAdsSpend').value = existing.adsSpend || '';
-        $('daySpp').value = existing.spp || '';
-        $('dayGiveaway').value = existing.giveaway || '';
-        $('dayReturnQ').value = existing.returnQ || '';
-        $('dayStorageCost').value = existing.storageCost || '';
+        _fillDayForm(existing);
         $('dayTitle').textContent = `✏️ Редактировать: ${date}`;
       } else {
         $('dayTitle').textContent = `➕ Добавить данные: ${date}`;
       }
+      _updateDaySelBar(date);
+      renderDayCal();
     }, 50);
+  }
+  function _fillDayForm(d) {
+    $('dayOrdQ').value = d.ordQ || '';
+    $('dayOrdS').value = d.ordS || '';
+    $('dayBuyQ').value = d.buyQ || '';
+    $('dayBuyS').value = d.buyS || '';
+    $('dayShows').value = d.shows || '';
+    $('dayClicks').value = d.clicks || '';
+    $('dayCart').value = d.cart || '';
+    $('dayStock').value = d.stock || '';
+    $('dayAdsShows').value = d.adsShows || '';
+    $('dayAdsClicks').value = d.adsClicks || '';
+    $('dayAdsSpend').value = d.adsSpend || '';
+    $('dayAdsOrdQ').value = d.adsOrdQ || '';
+    $('dayAdsCart').value = d.adsCart || '';
+    $('daySpp').value = d.spp || '';
+    $('dayGiveaway').value = d.giveaway || '';
+    $('dayReturnQ').value = d.returnQ || '';
+    $('dayStorageCost').value = d.storageCost || '';
+  }
+  function _updateDaySelBar(date) {
+    if (!date) { $('daySelLabel').textContent = 'Выбери дату в календаре'; return; }
+    const [y,m,d] = date.split('-');
+    const months = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+    $('daySelLabel').textContent = `${parseInt(d)} ${months[parseInt(m)-1]} ${y}`;
+  }
+  function renderDayCal() {
+    const ym = _dayCalYm || curMonth();
+    const [y, m] = ym.split('-').map(Number);
+    const today = new Date().toISOString().slice(0, 10);
+    const selDate = $('dayDate').value;
+    const sku = $('daySku').value;
+    const skuDays = new Set(db.days.filter(d => !sku || d.sku === sku).map(d => d.date));
+    const months = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+    $('dayCalMonthLabel').textContent = `${months[m-1]} ${y}`;
+    const firstDow = (new Date(y, m-1, 1).getDay() + 6) % 7; // Mon=0
+    const daysInMonth = new Date(y, m, 0).getDate();
+    let html = '';
+    for (let i = 0; i < firstDow; i++) html += '<span class="day-cal-empty"></span>';
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const hasData = skuDays.has(date);
+      const isPast = date < today;
+      const isToday = date === today;
+      const isSelected = selDate === date;
+      let cls = 'day-cal-cell';
+      if (isSelected) cls += ' c-selected';
+      else if (hasData) cls += ' c-has';
+      else if (isPast) cls += ' c-miss';
+      else if (!isToday) cls += ' c-future';
+      if (isToday && !isSelected) cls += ' c-today';
+      html += `<span class="${cls}" onclick="App.dayCalPick('${date}')">${d}</span>`;
+    }
+    $('dayCalGrid').innerHTML = html;
+  }
+  function dayCalShift(dir) {
+    const ym = _dayCalYm || curMonth();
+    const [y, m] = ym.split('-').map(Number);
+    const d = new Date(y, m-1+dir, 1);
+    _dayCalYm = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    renderDayCal();
+  }
+  function dayCalPick(date) {
+    $('dayDate').value = date;
+    _dayCalYm = date.slice(0, 7);
+    _updateDaySelBar(date);
+    // Auto-fill if existing data
+    const sku = $('daySku').value;
+    const existing = sku ? db.days.find(d => d.sku === sku && d.date === date) : null;
+    if (existing) {
+      $('dId').value = existing.id || '';
+      _fillDayForm(existing);
+      $('dayTitle').textContent = `✏️ Редактировать: ${date}`;
+    } else {
+      $('dId').value = '';
+      $('dayTitle').textContent = `➕ Добавить данные: ${date}`;
+    }
+    renderDayCal();
+  }
+  function _initDayDrop() {
+    const modal = $('mDay');
+    const overlay = $('dayDropOverlay');
+    if (modal._dropInited) return;
+    modal._dropInited = true;
+    document.addEventListener('dragenter', e => {
+      if (!$('mDay').classList.contains('open')) return;
+      if (e.dataTransfer && e.dataTransfer.types.includes('Files')) {
+        _dragCounter++;
+        overlay.classList.add('active');
+        e.preventDefault();
+      }
+    });
+    document.addEventListener('dragleave', e => {
+      if (!$('mDay').classList.contains('open')) return;
+      _dragCounter--;
+      if (_dragCounter <= 0) { _dragCounter = 0; overlay.classList.remove('active'); }
+    });
+    document.addEventListener('dragover', e => {
+      if ($('mDay').classList.contains('open')) e.preventDefault();
+    });
+    document.addEventListener('drop', e => {
+      if (!$('mDay').classList.contains('open')) return;
+      e.preventDefault();
+      _dragCounter = 0;
+      overlay.classList.remove('active');
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        const fakeInput = { files: [file] };
+        handleCsvFile(fakeInput);
+      }
+    });
   }
   function saveDay() {
     const rec = {
@@ -1148,6 +1254,7 @@ const App = (() => {
       buyQ:+$('dayBuyQ').value||0, buyS:+$('dayBuyS').value||0,
       shows:+$('dayShows').value||0, clicks:+$('dayClicks').value||0, cart:+$('dayCart').value||0,
       adsShows:+$('dayAdsShows').value||0, adsClicks:+$('dayAdsClicks').value||0, adsSpend:+$('dayAdsSpend').value||0,
+      adsOrdQ:+($('dayAdsOrdQ')&&$('dayAdsOrdQ').value)||0, adsCart:+($('dayAdsCart')&&$('dayAdsCart').value)||0,
       spp:+$('daySpp').value||0, giveaway:+$('dayGiveaway').value||0,
       returnQ:+$('dayReturnQ').value||0, storageCost:+$('dayStorageCost').value||0, source:'manual'
     };
@@ -1242,6 +1349,8 @@ const App = (() => {
   const MO_NAMES = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
   const MO_FULL  = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
   let _mpYear = new Date().getFullYear();
+  let _dayCalYm = null; // current month shown in day-modal calendar
+  let _dragCounter = 0; // for drag-over counter
 
   function _setMonth(ym) {
     $('month').value = ym;
@@ -1445,7 +1554,7 @@ const App = (() => {
   }
 
   window.addEventListener('DOMContentLoaded', init);
-  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,wbTest,wbSync,wbImportCards,theme,calcTestPrice,downloadTemplate,exportData,importCsv,handleCsvFile,downloadCostTemplate,importCosts,handleCostFile,shiftMonth,archiveMonth,toggleHidden,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory,openMonthPlan,saveMonthPlan};
+  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,wbTest,wbSync,wbImportCards,theme,calcTestPrice,downloadTemplate,exportData,importCsv,handleCsvFile,downloadCostTemplate,importCosts,handleCostFile,shiftMonth,archiveMonth,toggleHidden,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory,openMonthPlan,saveMonthPlan,renderDayCal,dayCalShift,dayCalPick};
 })();
 
 // Аккордеон инструкции (глобальные функции)

@@ -6,7 +6,7 @@
 <title>RNP Fadamos</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a73e8'/%3E%3Ctext x='16' y='22' font-family='Arial,sans-serif' font-size='13' font-weight='900' fill='white' text-anchor='middle' letter-spacing='-0.5'%3ERNP%3C/text%3E%3C/svg%3E">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260704">
+<link rel="stylesheet" href="style.css?v=20260705">
 </head>
 <body>
 <div class="top">
@@ -746,43 +746,60 @@ document.addEventListener('click', e => {
 <!-- MODAL: день -->
 <div class="modal" id="mDay"><div class="sheet sheet--wide">
   <button class="modal-close" onclick="App.close('mDay')" title="Закрыть">✕</button>
+
+  <!-- Drag-drop overlay (full modal) -->
+  <div class="day-drop-overlay" id="dayDropOverlay">
+    <div class="day-drop-inner">📂<br>Отпусти файл — данные загрузятся</div>
+  </div>
+
   <div class="day-modal-header">
-    <div>
-      <h2 id="dayTitle" style="margin:0 0 4px">➕ Данные за день</h2>
-      <p class="day-modal-sub">Вноси данные из кабинета WB ежедневно или загрузи сразу за несколько дней через CSV</p>
-    </div>
+    <h2 id="dayTitle" style="margin:0 0 4px">➕ Данные за день</h2>
+    <p class="day-modal-sub">Кликни по дате в календаре → заполни показатели → сохрани</p>
   </div>
   <input type="hidden" id="dId">
 
-  <!-- Быстрая загрузка из файла -->
-  <div class="day-upload-block">
-    <div class="day-upload-icon">📂</div>
-    <div class="day-upload-text">
-      <div class="day-upload-title">Загрузить из Excel / CSV</div>
-      <div class="day-upload-sub">Быстрый способ — скачай шаблон, заполни в Excel, загрузи обратно. Данные добавятся автоматически за все дни.</div>
+  <!-- SKU + upload row -->
+  <div class="day-sku-row">
+    <div class="fld" style="flex:1;min-width:0">
+      <label>Товар</label>
+      <select id="daySku" onchange="App.renderDayCal()"><option value="">— выбери товар —</option></select>
     </div>
-    <div class="day-upload-btns">
-      <button class="btn ghost sm" onclick="App.downloadTemplate()">📋 Шаблон</button>
-      <button class="btn sm" onclick="$('dayFileInput').click()">📂 Загрузить файл</button>
+    <div class="day-sku-actions">
+      <button class="btn ghost sm" onclick="App.downloadTemplate()" title="Скачать шаблон CSV">📋 Шаблон</button>
+      <button class="btn sm" onclick="$('dayFileInput').click()" title="Загрузить Excel/CSV">📂 Файл</button>
       <input type="file" id="dayFileInput" accept=".csv,.xlsx,.xls" style="display:none" onchange="App.handleCsvFile(this)">
     </div>
   </div>
 
-  <div class="day-divider"><span>или вводи вручную</span></div>
-
-  <!-- Основное -->
-  <div class="msec">
-    <div class="msec-hd">
-      <div class="msec-t">📋 Основное</div>
-      <div class="msec-hint">Выбери товар и дату — за какой день вносишь данные</div>
+  <!-- Visual Calendar -->
+  <div class="day-cal-section">
+    <div class="day-cal-nav">
+      <button class="day-cal-nav-btn" onclick="App.dayCalShift(-1)">‹</button>
+      <span class="day-cal-month-lbl" id="dayCalMonthLabel">—</span>
+      <button class="day-cal-nav-btn" onclick="App.dayCalShift(1)">›</button>
     </div>
-    <div class="grid3" style="padding:14px">
-      <div class="fld"><label>Дата</label><input type="date" id="dayDate"></div>
-      <div class="fld"><label>Товар (SKU)</label>
-        <select id="daySku"><option value="">— выбери товар —</option></select>
+    <div class="day-cal-dows">
+      <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+    </div>
+    <div class="day-cal-grid" id="dayCalGrid"></div>
+    <div class="day-cal-bottom">
+      <div class="day-cal-legend">
+        <span><span class="day-cal-leg c-has"></span> Есть данные</span>
+        <span><span class="day-cal-leg c-miss"></span> Нет данных</span>
+        <span><span class="day-cal-leg c-today"></span> Сегодня</span>
       </div>
+      <div class="day-cal-drop-hint">📂 Перетащи Excel/CSV файл прямо сюда</div>
     </div>
   </div>
+
+  <!-- Selected date bar -->
+  <div class="day-sel-bar" id="daySelBar">
+    <span class="day-sel-icon">📅</span>
+    <span id="daySelLabel" class="day-sel-label">Выбери дату в календаре</span>
+    <input type="date" id="dayDate" class="day-date-input">
+  </div>
+
+  <div class="day-divider"><span>данные за выбранный день</span></div>
 
   <!-- Заказы и продажи -->
   <div class="msec">
@@ -824,6 +841,8 @@ document.addEventListener('click', e => {
       <div class="fld"><label>Показы РК <span class="tip" data-tip="Платные показы из рекламных кампаний (отдельно от органических)">?</span></label><input type="number" id="dayAdsShows" min="0" placeholder="0"></div>
       <div class="fld"><label>Клики РК <span class="tip" data-tip="Клики по рекламным объявлениям">?</span></label><input type="number" id="dayAdsClicks" min="0" placeholder="0"></div>
       <div class="fld"><label>Расход РК, ₽ <span class="tip" data-tip="Сколько потрачено на рекламу за день. Влияет на ДРР.">?</span></label><input type="number" id="dayAdsSpend" min="0" placeholder="0"></div>
+      <div class="fld"><label>Заказов с РК <span class="tip" data-tip="Сколько заказов пришло через рекламные кампании WB">?</span></label><input type="number" id="dayAdsOrdQ" min="0" placeholder="0"></div>
+      <div class="fld"><label>Корзин с РК <span class="tip" data-tip="Добавлений в корзину через рекламные кампании">?</span></label><input type="number" id="dayAdsCart" min="0" placeholder="0"></div>
     </div>
   </div>
 
@@ -942,6 +961,6 @@ document.addEventListener('click', e => {
 </div>
 
 <div class="toast" id="toast"></div>
-<script src="app.js?v=20260704"></script>
+<script src="app.js?v=20260705"></script>
 </body>
 </html>
