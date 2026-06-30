@@ -844,8 +844,15 @@ const App = (() => {
     try {
       const me = await fetch('/api/auth/me').then(r => r.json());
       if (!me || !me.user) { window.location.href = '/login.html'; return; }
+      // Имя пользователя в шапке
       const ui = $('userInfo');
       if (ui) ui.textContent = me.user.name;
+      // Аватар — первая буква имени
+      const av = $('topAvatar');
+      if (av) av.textContent = (me.user.name || '?')[0].toUpperCase();
+      // Имя магазина — из настроек или имени пользователя
+      const shopEl = $('topShopName');
+      if (shopEl) shopEl.textContent = db.settings?.shopName || me.user.name || 'Мой магазин';
     } catch { window.location.href = '/login.html'; return; }
 
     _setMonth(new Date().toISOString().slice(0,7));

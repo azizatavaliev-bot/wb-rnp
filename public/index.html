@@ -9,12 +9,26 @@
 </head>
 <body>
 <div class="top">
+
+  <!-- ЛЕВАЯ ЧАСТЬ: лого + название магазина -->
   <div class="top-left">
-    <span class="logo">📡</span>
-    <b style="font-size:15px;font-weight:800">РНП · Рука на пульсе</b>
-    <span class="pulse"></span>
+    <div class="top-brand">
+      <span class="top-logo">📡</span>
+      <div class="top-brand-text">
+        <span class="top-app-name">РНП</span>
+        <span class="top-app-sub">Wildberries</span>
+      </div>
+    </div>
+    <div class="top-divider"></div>
+    <div class="top-shop" id="topShop">
+      <span class="top-shop-icon">🏪</span>
+      <span class="top-shop-name" id="topShopName">Мой магазин</span>
+      <span class="pulse"></span>
+    </div>
   </div>
-  <div class="top-right">
+
+  <!-- ЦЕНТР: навигация по месяцу -->
+  <div class="top-center">
     <div class="month-nav">
       <button class="mnav-btn" onclick="App.shiftMonth(-1)" title="Предыдущий месяц">‹</button>
       <button class="month-btn" id="monthBtn" onclick="App.toggleMonthPicker(event)" title="Выбрать месяц">
@@ -31,20 +45,58 @@
       </div>
       <div class="mp-grid" id="mpGrid"></div>
     </div>
-    <button class="btn sm" onclick="App.openDay()">＋ День</button>
-    <div class="csv-group" style="display:flex;gap:4px;align-items:center">
-      <button class="btn sm ghost" onclick="App.exportData('month')" title="Экспорт данных текущего месяца в CSV">📤 Экспорт</button>
-      <button class="btn sm ghost" onclick="App.importCsv()" title="Импортировать CSV">📥 Импорт</button>
-      <button class="btn sm ghost" onclick="App.downloadTemplate()" title="Скачать пустой шаблон CSV">📋</button>
+  </div>
+
+  <!-- ПРАВАЯ ЧАСТЬ: действия + пользователь -->
+  <div class="top-right">
+    <!-- Кнопка добавить день -->
+    <button class="btn sm top-add-btn" onclick="App.openDay()" title="Добавить данные за день">
+      ＋ День
+    </button>
+
+    <!-- Группа данных: экспорт/импорт — в одном дропдауне -->
+    <div class="top-data-menu" id="topDataMenu">
+      <button class="btn sm ghost top-data-trigger" onclick="toggleDataMenu()" title="Данные">
+        📊 Данные ▾
+      </button>
+      <div class="top-data-dropdown" id="topDataDropdown">
+        <button onclick="App.exportData('month');toggleDataMenu()">📤 Экспорт месяца</button>
+        <button onclick="App.exportData('all');toggleDataMenu()">📤 Экспорт всё</button>
+        <div class="top-dd-sep"></div>
+        <button onclick="App.importCsv();toggleDataMenu()">📥 Импорт CSV</button>
+        <button onclick="App.downloadTemplate();toggleDataMenu()">📋 Скачать шаблон</button>
+        <div class="top-dd-sep"></div>
+        <button onclick="App.archiveMonth();toggleDataMenu()">💾 Архив месяца</button>
+      </div>
     </div>
-    <button class="btn sm ghost" onclick="App.archiveMonth()" title="Сохранить архив текущего месяца">💾 Архив</button>
+
+    <!-- Скрытые инпуты -->
     <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="App.handleCsvFile(this)">
     <input type="file" id="costFileInput" accept=".csv,.xlsx,.xls" style="display:none" onchange="App.handleCostFile(this)">
-    <span id="userInfo" style="font-size:11px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
-    <button class="btn sm ghost" onclick="App.logout()" title="Выйти">⎋ Выйти</button>
-    <button class="themebtn" id="themeBtn" onclick="App.theme()">🌙</button>
+
+    <!-- Юзер -->
+    <div class="top-user">
+      <div class="top-user-avatar" id="topAvatar">?</div>
+      <span class="top-user-name" id="userInfo"></span>
+      <button class="top-logout-btn" onclick="App.logout()" title="Выйти из аккаунта">⎋</button>
+    </div>
+
+    <!-- Тема -->
+    <button class="themebtn" id="themeBtn" onclick="App.theme()" title="Сменить тему">🌙</button>
   </div>
 </div>
+
+<script>
+function toggleDataMenu() {
+  const dd = document.getElementById('topDataDropdown');
+  dd.classList.toggle('open');
+}
+document.addEventListener('click', e => {
+  if (!document.getElementById('topDataMenu')?.contains(e.target)) {
+    document.getElementById('topDataDropdown')?.classList.remove('open');
+  }
+});
+</script>
 
 
 <div class="wrap">
