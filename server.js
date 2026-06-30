@@ -1,8 +1,9 @@
-// РНП v4 — Рука на пульсе · Wildberries + Auth
+// РНП v5 — Рука на пульсе · Wildberries + Auth
 const http   = require('http');
 const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
+const zlib   = require('zlib');
 
 const PORT    = process.env.PORT || 4810;
 const PUB     = path.join(__dirname, 'public');
@@ -17,6 +18,86 @@ const ARC_DIR = path.join(DATA, 'archive');
 
 // ---- Auth helpers ----
 const sessions = new Map(); // token → {userId, email, name, expires}
+setInterval(() => { for (const [k, s] of sessions) if (s.expires < Date.now()) sessions.delete(k); }, 3600000);
+
+// ---- In-memory DB cache (ключевое ускорение) ----
+const dbCache = new Map(); // userId → db object
+function loadUserDB(userId) {
+  if (dbCache.has(userId)) return dbCache.get(userId);
+  let db;
+  try { db = Object.assign({}, DEFAULT_DB, JSON.parse(fs.readFileSync(userDbPath(userId), 'utf8'))); }
+  catch { db = JSON.parse(JSON.stringify(DEFAULT_DB)); }
+  dbCache.set(userId, db);
+  return db;
+}
+function saveUserDB(userId, db) {
+  dbCache.set(userId, db);
+  try { fs.writeFileSync(userDbPath(userId), JSON.stringify(db)); } catch {}
+}
+
+// ---- Rate limiting (защита от брутфорса) ----
+const rateLimits = new Map(); // ip → { count, reset }
+const RATE_WINDOW = 60000; // 1 минута
+const RATE_MAX    = 20;    // макс 20 auth-запросов в минуту
+function rateLimit(ip) {
+  const now = Date.now();
+  let r = rateLimits.get(ip);
+  if (!r || r.reset < now) { r = { count:0, reset: now + RATE_WINDOW }; rateLimits.set(ip, r); }
+  r.count++;
+  return r.count > RATE_MAX;
+}
+setInterval(() => { const now = Date.now(); for (const [k,v] of rateLimits) if (v.reset < now) rateLimits.delete(k); }, 60000);
+
+// ---- Security headers ----
+const IS_PROD = !!process.env.RAILWAY_ENVIRONMENT;
+const SEC_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'X-XSS-Protection': '1; mode=block',
+  'Referrer-Policy': 'same-origin',
+  'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; img-src 'self' data:",
+};
+
+// ---- Gzip-aware send ----
+function sendGzip(req, res, code, data, contentType) {
+  const body   = typeof data === 'string' ? data : JSON.stringify(data);
+  const accepts = req.headers['accept-encoding'] || '';
+  const ct = contentType || 'application/json; charset=utf-8';
+  const headers = { 'Content-Type': ct, ...SEC_HEADERS };
+  if (accepts.includes('gzip') && body.length > 512) {
+    zlib.gzip(Buffer.from(body), (err, buf) => {
+      if (err) { res.writeHead(code, headers); res.end(body); return; }
+      res.writeHead(code, { ...headers, 'Content-Encoding':'gzip', 'Vary':'Accept-Encoding', 'Content-Length': buf.length });
+      res.end(buf);
+    });
+  } else {
+    res.writeHead(code, headers);
+    res.end(body);
+  }
+}
+
+// ---- Static file cache (ETag) ----
+const staticCache = new Map(); // filepath → { etag, data }
+function serveStatic(req, res, fp, cacheSeconds) {
+  fs.stat(fp, (err, stat) => {
+    if (err) { res.writeHead(404, SEC_HEADERS); res.end('Not found'); return; }
+    const etag = `"${stat.mtimeMs.toString(36)}-${stat.size}"`;
+    if (req.headers['if-none-match'] === etag) { res.writeHead(304, SEC_HEADERS); res.end(); return; }
+    const ct = MIME[path.extname(fp)] || 'application/octet-stream';
+    const cc = cacheSeconds ? `public, max-age=${cacheSeconds}` : 'no-store';
+    const cached = staticCache.get(fp);
+    if (cached && cached.etag === etag) {
+      res.writeHead(200, { 'Content-Type':ct, 'Cache-Control':cc, 'ETag':etag, ...SEC_HEADERS });
+      res.end(cached.data); return;
+    }
+    fs.readFile(fp, (err2, data) => {
+      if (err2) { res.writeHead(404, SEC_HEADERS); res.end('Not found'); return; }
+      staticCache.set(fp, { etag, data });
+      res.writeHead(200, { 'Content-Type':ct, 'Cache-Control':cc, 'ETag':etag, ...SEC_HEADERS });
+      res.end(data);
+    });
+  });
+}
 
 function hashPass(pass, salt) {
   return crypto.createHmac('sha256', salt).update(pass).digest('hex');
@@ -33,7 +114,8 @@ function getSession(req) {
   return s;
 }
 function setCookie(res, token) {
-  res.setHeader('Set-Cookie', `rnp_session=${token}; HttpOnly; Path=/; Max-Age=2592000`);
+  const secure = IS_PROD ? '; Secure; SameSite=Strict' : '';
+  res.setHeader('Set-Cookie', `rnp_session=${token}; HttpOnly; Path=/; Max-Age=2592000${secure}`);
 }
 function clearCookie(res) {
   res.setHeader('Set-Cookie', 'rnp_session=; HttpOnly; Path=/; Max-Age=0');
@@ -61,13 +143,7 @@ function userDbPath(userId) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   return path.join(dir, 'db.json');
 }
-function loadUserDB(userId) {
-  try { return Object.assign({}, DEFAULT_DB, JSON.parse(fs.readFileSync(userDbPath(userId), 'utf8'))); }
-  catch { return JSON.parse(JSON.stringify(DEFAULT_DB)); }
-}
-function saveUserDB(userId, db) {
-  try { fs.writeFileSync(userDbPath(userId), JSON.stringify(db, null, 2)); } catch {}
-}
+// loadUserDB / saveUserDB определены ниже после dbCache
 
 // ---- Demo seed ----
 function seedUserDemo(userId) {
@@ -161,13 +237,16 @@ function seedUserDemo(userId) {
         const adsSpend = Math.round(adsBase * (isWknd ? 0.7 : 1.0) * saleMult);
         const stock    = Math.max(5, irng(80,300) - Math.round(d * buyQ * 0.05));
         const isNewbie = p.status === 'Новинка';
-        const giveaway = mo.ym === '2026-04' && d <= 5 && isNewbie ? irng(1,5) : 0;
+        const giveaway    = mo.ym === '2026-04' && d <= 5 && isNewbie ? irng(1,5) : 0;
+        const returnQ     = buyQ > 0 ? Math.round(buyQ * rng(0.03, 0.12)) : 0;
+        const storageCost = Math.round(stock * rng(0.5, 2.0));
 
         days.push({
           id: `demo_${p.sku}_${date}`,
           date, sku: p.sku,
           ordQ, ordS, buyQ, buyS, stock, shows, clicks, cart,
           adsShows, adsClicks, adsSpend, spp, giveaway,
+          returnQ, storageCost,
           source: 'demo'
         });
       }
@@ -248,7 +327,7 @@ async function wbSync(db, key, dateFrom) {
   const dateOf = d => (d || '').slice(0, 10);
   function bucket(date, sku) {
     const k = date + '|' + sku;
-    if (!map[k]) map[k] = { date, sku, ordQ:0, ordS:0, buyQ:0, buyS:0, stock:0, shows:0, clicks:0, cart:0, adsShows:0, adsClicks:0, adsSpend:0, spp:0, giveaway:0 };
+    if (!map[k]) map[k] = { date, sku, ordQ:0, ordS:0, buyQ:0, buyS:0, stock:0, shows:0, clicks:0, cart:0, adsShows:0, adsClicks:0, adsSpend:0, spp:0, giveaway:0, returnQ:0, storageCost:0 };
     return map[k];
   }
   orders.forEach(o => { const b = bucket(dateOf(o.date), skuOf(o)); b.ordQ += 1; b.ordS += (o.priceWithDisc || o.totalPrice || 0); });
@@ -278,9 +357,10 @@ async function wbSync(db, key, dateFrom) {
 const MIME = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8' };
 
 function send(res, code, data, type) {
-  res.writeHead(code, { 'Content-Type': type || 'application/json; charset=utf-8' });
-  if (Buffer.isBuffer(data) || typeof data === 'string') res.end(data);
-  else res.end(JSON.stringify(data));
+  const body = Buffer.isBuffer(data) || typeof data === 'string' ? data : JSON.stringify(data);
+  const headers = { 'Content-Type': type || 'application/json; charset=utf-8', ...SEC_HEADERS };
+  res.writeHead(code, headers);
+  res.end(body);
 }
 function body(req) {
   return new Promise(r => { let b=''; req.on('data', c => b+=c); req.on('end', () => { try { r(JSON.parse(b||'{}')); } catch { r({}); } }); });
@@ -296,6 +376,10 @@ const server = http.createServer(async (req, res) => {
   const p = u.pathname;
 
   // ---- Auth endpoints (no session required) ----
+  if ((p === '/api/auth/register' || p === '/api/auth/login') && req.method === 'POST') {
+    const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || 'unknown';
+    if (rateLimit(ip)) return send(res, 429, { ok:false, msg:'Слишком много запросов. Подождите минуту.' });
+  }
   if (p === '/api/auth/register' && req.method === 'POST') {
     const b = await body(req);
     const { email, name, password } = b;
@@ -306,7 +390,7 @@ const server = http.createServer(async (req, res) => {
     const user = { id: genToken().slice(0,12), email, name, passHash: hashPass(password, salt), salt, createdAt: new Date().toISOString() };
     users.push(user);
     saveUsers(users);
-    seedUserDemo(user.id);
+    // новый пользователь начинает с чистого листа (не seedUserDemo)
     const token = genToken();
     sessions.set(token, { userId: user.id, email: user.email, name: user.name, expires: Date.now() + 30*24*3600*1000 });
     setCookie(res, token);
@@ -333,7 +417,7 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { ok:true });
   }
 
-  if (p === '/api/auth/me') {
+  if (p === '/api/auth/me' && req.method === 'GET') {
     const sess = getSession(req);
     if (!sess) return send(res, 401, { error: 'unauthorized' });
     return send(res, 200, { user: { id:sess.userId, email:sess.email, name:sess.name } });
@@ -365,24 +449,14 @@ const server = http.createServer(async (req, res) => {
 
   // ---- Static files (login.html always available) ----
   if (p === '/login.html') {
-    const fp = path.join(PUB, 'login.html');
-    return fs.readFile(fp, (err, data) => {
-      if (err) return send(res, 404, 'Not found', 'text/plain');
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-      res.end(data);
-    });
+    return serveStatic(req, res, path.join(PUB, 'login.html'), 0);
   }
 
   // ---- Root: redirect to login if no session ----
   if (p === '/') {
     const sess = getSession(req);
     if (!sess) return redirect(res, '/login.html');
-    const fp = path.join(PUB, 'index.html');
-    return fs.readFile(fp, (err, data) => {
-      if (err) return send(res, 404, 'Not found', 'text/plain');
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-      res.end(data);
-    });
+    return serveStatic(req, res, path.join(PUB, 'index.html'), 0);
   }
 
   // ---- Protected API endpoints ----
@@ -393,7 +467,7 @@ const server = http.createServer(async (req, res) => {
     const db = loadUserDB(userId);
 
     try {
-      if (p === '/api/state' && req.method === 'GET') return send(res, 200, db);
+      if (p === '/api/state' && req.method === 'GET') return sendGzip(req, res, 200, db);
 
       if (p === '/api/save' && req.method === 'POST') {
         const b = await body(req);
@@ -432,15 +506,19 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/archive/save' && req.method === 'POST') {
         const b = await body(req);
         if (!b.ym) return send(res, 200, { ok:false, msg:'Нет ym' });
-        const file = path.join(ARC_DIR, b.ym+'.json');
+        const userArcDir = path.join(DATA, 'u', String(userId), 'archive');
+        if (!fs.existsSync(userArcDir)) fs.mkdirSync(userArcDir, { recursive: true });
+        const file = path.join(userArcDir, b.ym+'.json');
         fs.writeFileSync(file, JSON.stringify(b, null, 2));
         return send(res, 200, { ok:true, file });
       }
 
       if (p === '/api/archive/list' && req.method === 'GET') {
-        const files = fs.readdirSync(ARC_DIR).filter(f => f.endsWith('.json')).sort().reverse();
+        const userArcDir = path.join(DATA, 'u', String(userId), 'archive');
+        if (!fs.existsSync(userArcDir)) return send(res, 200, []);
+        const files = fs.readdirSync(userArcDir).filter(f => f.endsWith('.json')).sort().reverse();
         const list = files.map(f => {
-          try { const d = JSON.parse(fs.readFileSync(path.join(ARC_DIR, f), 'utf8')); return { ym:d.ym, name:d.name, savedAt:d.savedAt, days:d.days?.length }; }
+          try { const d = JSON.parse(fs.readFileSync(path.join(userArcDir, f), 'utf8')); return { ym:d.ym, name:d.name, savedAt:d.savedAt, days:d.days?.length }; }
           catch { return { ym:f.replace('.json','') }; }
         });
         return send(res, 200, list);
@@ -448,7 +526,8 @@ const server = http.createServer(async (req, res) => {
 
       if (p.startsWith('/api/archive/view') && req.method === 'GET') {
         const ym = u.searchParams.get('ym');
-        const file = path.join(ARC_DIR, (ym||'')+'.json');
+        const userArcDir = path.join(DATA, 'u', String(userId), 'archive');
+        const file = path.join(userArcDir, (ym||'')+'.json');
         if (!ym || !fs.existsSync(file)) return send(res, 404, { error:'not found' });
         return send(res, 200, JSON.parse(fs.readFileSync(file, 'utf8')));
       }
@@ -506,17 +585,11 @@ const server = http.createServer(async (req, res) => {
     } catch(e) { return send(res, 500, { error:e.message }); }
   }
 
-  // ---- Other static files ----
+  // ---- Other static files (JS/CSS — кэш 7 дней) ----
   const fp = path.join(PUB, path.normalize(p).replace(/^(\.\.[/\\])+/, ''));
-  fs.readFile(fp, (err, data) => {
-    if (err) return send(res, 404, 'Not found', 'text/plain');
-    res.writeHead(200, {
-      'Content-Type': MIME[path.extname(fp)] || 'application/octet-stream',
-      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-      'Pragma': 'no-cache', 'Expires': '0'
-    });
-    res.end(data);
-  });
+  const ext = path.extname(fp);
+  const cacheSec = (ext === '.js' || ext === '.css') ? 604800 : 0;
+  return serveStatic(req, res, fp, cacheSec);
 });
 
 ensureDemoUser();

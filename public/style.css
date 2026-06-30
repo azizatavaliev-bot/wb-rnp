@@ -16,6 +16,7 @@
   --sec-ink: #1a56c4;
   --hdr-bg: #3c3c3c;
   --hdr-ink: #fff;
+  --fg: var(--ink);
   --font: 'Inter', -apple-system, sans-serif;
 }
 body.dark {
@@ -496,12 +497,19 @@ tr.plan-row.r-ads-funnel > td { background-color: #e1f5fe !important; }
 tr.plan-row.r-ads > td      { background-color: #fffde7 !important; }
 tr.plan-row.r-fin > td      { background-color: #fce4ec !important; }
 
-/* ── Hover ── */
-tr.r-orders:hover     > td { background-color: #aed581 !important; }
-tr.r-funnel:hover     > td { background-color: #7986cb !important; color: #fff; }
-tr.r-ads-funnel:hover > td { background-color: #4fc3f7 !important; }
-tr.r-ads:hover        > td { background-color: #ffd54f !important; }
-tr.r-fin:hover        > td { background-color: #f06292 !important; color: #fff; }
+/* ── Hover (light mode — мягкие пастельные) ── */
+tr.r-orders:hover     > td { background-color: #dcedc8 !important; }
+tr.r-funnel:hover     > td { background-color: #c5cae9 !important; }
+tr.r-ads-funnel:hover > td { background-color: #b3e5fc !important; }
+tr.r-ads:hover        > td { background-color: #fff9c4 !important; }
+tr.r-fin:hover        > td { background-color: #fce4ec !important; }
+
+/* ── Hover (dark mode — чуть ярче базы) ── */
+body.dark tr.r-orders:hover     > td { background-color: #2e4a1a !important; }
+body.dark tr.r-funnel:hover     > td { background-color: #2d3168 !important; }
+body.dark tr.r-ads-funnel:hover > td { background-color: #0e3a52 !important; }
+body.dark tr.r-ads:hover        > td { background-color: #3d3100 !important; }
+body.dark tr.r-fin:hover        > td { background-color: #4a1528 !important; }
 
 /* ── Dark mode — нейтральные строки без резких цветов ── */
 body.dark tr.r-orders.r-even  > td,
@@ -601,9 +609,11 @@ td { font-variant-numeric: tabular-nums; }
 .prod-block { border: 2px solid #bdbdbd; border-radius: 4px; margin-bottom: 24px; }
 body.dark .prod-block { border-color: #444; }
 
-/* Шапка товара — более насыщенная */
-.ph { background: #1a1a2e !important; }
-.ph-name { background: #0d0d1a !important; font-size: 14px !important; }
+/* Шапка товара — тёмно-синяя (оба режима) */
+.ph { background: #1e3a6e !important; }
+.ph-name { background: #152d57 !important; font-size: 14px !important; }
+body.dark .ph { background: #0f1f3d !important; }
+body.dark .ph-name { background: #0a1528 !important; }
 
 /* Кнопка внутри шапки */
 .ph-btn { font-size: 11.5px !important; padding: 3px 10px !important; border-radius: 3px !important; }

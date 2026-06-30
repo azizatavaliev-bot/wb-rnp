@@ -47,17 +47,18 @@ const App = (() => {
     return { ordQ:sum('ordQ'), ordS:sum('ordS'), buyQ:sum('buyQ'), buyS:sum('buyS'),
       stock:last('stock'), shows:sum('shows'), clicks:sum('clicks'), cart:sum('cart'),
       adsShows:sum('adsShows'), adsClicks:sum('adsClicks'), adsSpend,
-      spp:avg('spp'), giveaway:sum('giveaway'), n:sub.length };
+      spp:avg('spp'), giveaway:sum('giveaway'),
+      returnQ:sum('returnQ'), storageCost:sum('storageCost'), n:sub.length };
   }
 
   function factAllOf(monthDays, skus, dates) {
-    const z = {ordQ:0,ordS:0,buyQ:0,buyS:0,stock:0,shows:0,clicks:0,cart:0,adsShows:0,adsClicks:0,adsSpend:0,spp:0,giveaway:0,n:0};
+    const z = {ordQ:0,ordS:0,buyQ:0,buyS:0,stock:0,shows:0,clicks:0,cart:0,adsShows:0,adsClicks:0,adsSpend:0,spp:0,giveaway:0,returnQ:0,storageCost:0,n:0};
     for (const sku of skus) {
       const f = factOf(monthDays, sku, dates);
       z.ordQ+=f.ordQ; z.ordS+=f.ordS; z.buyQ+=f.buyQ; z.buyS+=f.buyS;
       z.stock+=f.stock; z.shows+=f.shows; z.clicks+=f.clicks; z.cart+=f.cart;
       z.adsShows+=f.adsShows; z.adsClicks+=f.adsClicks; z.adsSpend+=f.adsSpend;
-      z.giveaway+=f.giveaway; z.n+=f.n;
+      z.giveaway+=f.giveaway; z.returnQ+=f.returnQ; z.storageCost+=f.storageCost; z.n+=f.n;
     }
     const sppNum = skus.reduce((a,sku) => { const f=factOf(monthDays,sku,dates); return a+f.spp*f.buyQ; }, 0);
     z.spp = z.buyQ>0 ? sppNum/z.buyQ : 0;
@@ -102,13 +103,15 @@ const App = (() => {
     const logPct     = rev>0 ? log/rev*100 : 0;
     const wbSharePct = rev>0 ? (comm+log)/rev*100 : 0;
     const wbDrrPct   = rev>0 ? (comm+log+f.adsSpend)/rev*100 : 0;
+    const returnPct  = f.buyQ>0 ? (f.returnQ||0)/f.buyQ*100 : 0;
+    const storePct   = rev>0 ? (f.storageCost||0)/rev*100 : 0;
     return {
       kPerech : kp, kPerechPer,
       rentab  : costT>0 ? kp/costT*100 : 0,
       margin  : rev>0 ? profit/rev*100 : 0,
       drr     : f.buyS>0 ? f.adsSpend/f.buyS*100 : 0,
       profit, profitPer,
-      logPct, wbSharePct, wbDrrPct,
+      logPct, wbSharePct, wbDrrPct, returnPct, storePct,
       buyoutPct : f.ordQ>0 ? f.buyQ/f.ordQ*100 : (p.buyout||0),
       avgCheck  : f.ordQ>0 ? f.ordS/f.ordQ : 0,
       ctr    : f.shows>0  ? f.clicks/f.shows*100   : 0,
@@ -411,6 +414,10 @@ const App = (() => {
     rowS('К перечислению ₽', eTotAll.kPerech/cntAll, wkEAll.map(e=>e.kPerech), eTotAll.kPerech, dayEAll.map(e=>e.kPerech), v=>fmt(v,0));
     rowS('Прибыль ₽', eTotAll.profit/cntAll, wkEAll.map(e=>e.profit), eTotAll.profit, dayEAll.map(e=>e.profit), v=>fmt(v,0));
     rowS('Маржа %', eTotAll.margin, wkEAll.map(e=>e.margin), eTotAll.margin, dayEAll.map(e=>e.margin), v=>fmtP(v,1));
+    rowS('Возвраты, шт', avgFAll.returnQ, wkFAll.map(f=>f.returnQ), fTotAll.returnQ, dayFAll.map(f=>f.returnQ), fmt);
+    rowS('Возврат %', eTotAll.returnPct, wkEAll.map(e=>e.returnPct), eTotAll.returnPct, dayEAll.map(e=>e.returnPct), v=>fmtP(v,1));
+    rowS('Хранение ₽', avgFAll.storageCost, wkFAll.map(f=>f.storageCost), fTotAll.storageCost, dayFAll.map(f=>f.storageCost), fmt);
+    rowS('Хранение %', eTotAll.storePct, wkEAll.map(e=>e.storePct), eTotAll.storePct, dayEAll.map(e=>e.storePct), v=>fmtP(v,1));
     rowS('Остаток (сумма), шт', null, wkFAll.map(f=>f.stock), fTotAll.stock, dayFAll.map(f=>f.stock), fmt);
 
     const table = `<div class="pg-wrap">
@@ -688,6 +695,10 @@ const App = (() => {
     row('Логистика % <span class="tip" data-tip="Расход на логистику ÷ Выкупы × 100. Показывает нагрузку логистики на выручку.">?</span>', avgE.logPct, wkE.map(e=>e.logPct), eTot.logPct, dayE.map(e=>e.logPct), v=>fmtP(v,1));
     row('Доля ВБ % (без ДРР) <span class="tip" data-tip="(Комиссия + Логистика) ÷ Выкупы × 100. Полная нагрузка WB без учёта рекламы.">?</span>', avgE.wbSharePct, wkE.map(e=>e.wbSharePct), eTot.wbSharePct, dayE.map(e=>e.wbSharePct), v=>fmtP(v,1));
     row('Доля ВБ с ДРР % <span class="tip" data-tip="(Комиссия + Логистика + Реклама) ÷ Выкупы × 100. Вся нагрузка на выручку.">?</span>', avgE.wbDrrPct, wkE.map(e=>e.wbDrrPct), eTot.wbDrrPct, dayE.map(e=>e.wbDrrPct), v=>fmtP(v,1));
+    row('Возвраты, шт <span class="tip" data-tip="Количество возвращённых товаров. Высокий возврат увеличивает расходы на логистику.">?</span>', avgF.returnQ, wkF.map(f=>f.returnQ), fTot.returnQ, dayF.map(f=>f.returnQ), fmt);
+    row('Возврат % <span class="tip" data-tip="Возвраты ÷ Выкупы × 100. Норма: < 10%. Высокий % — сигнал проблем с качеством или описанием.">?</span>', avgE.returnPct, wkE.map(e=>e.returnPct), eTot.returnPct, dayE.map(e=>e.returnPct), v=>fmtP(v,1));
+    row('Хранение ₽ <span class="tip" data-tip="Стоимость хранения на складе WB за период. Вводится вручную или из отчёта WB.">?</span>', avgF.storageCost, wkF.map(f=>f.storageCost), fTot.storageCost, dayF.map(f=>f.storageCost), fmt);
+    row('Хранение % <span class="tip" data-tip="Хранение ÷ Выкупы × 100. Показывает нагрузку хранения на выручку. Норма: < 3%.">?</span>', avgE.storePct, wkE.map(e=>e.storePct), eTot.storePct, dayE.map(e=>e.storePct), v=>fmtP(v,1));
     row('Остаток, шт <span class="tip" data-tip="Текущий остаток на складе WB. Обнуление = потеря позиций в поиске. Следи за пополнением.">?</span>', null, wkF.map(f=>f.stock), fTot.stock, dayF.map(f=>f.stock), fmt);
 
     const table = `<div class="pg-wrap">
@@ -1012,7 +1023,7 @@ const App = (() => {
     const skuSel=$('daySku');
     skuSel.innerHTML='<option value="">— выбери товар —</option>'+db.products.map(p=>`<option value="${esc(p.sku)}">${esc(p.name||p.sku)}</option>`).join('');
     if(sku) skuSel.value=sku;
-    ['dayStock','dayOrdQ','dayOrdS','dayBuyQ','dayBuyS','dayShows','dayClicks','dayCart','dayAdsShows','dayAdsClicks','dayAdsSpend','daySpp','dayGiveaway']
+    ['dayStock','dayOrdQ','dayOrdS','dayBuyQ','dayBuyS','dayShows','dayClicks','dayCart','dayAdsShows','dayAdsClicks','dayAdsSpend','daySpp','dayGiveaway','dayReturnQ','dayStorageCost']
       .forEach(id=>{ const el=$(id); if(el)el.value=''; });
     $('skuList').innerHTML=db.products.map(p=>`<option value="${esc(p.sku)}">${esc(p.name||p.sku)}</option>`).join('');
     $('mDay').classList.add('open');
@@ -1038,6 +1049,8 @@ const App = (() => {
         $('dayAdsSpend').value = existing.adsSpend || '';
         $('daySpp').value = existing.spp || '';
         $('dayGiveaway').value = existing.giveaway || '';
+        $('dayReturnQ').value = existing.returnQ || '';
+        $('dayStorageCost').value = existing.storageCost || '';
         $('dayTitle').textContent = `✏️ Редактировать: ${date}`;
       } else {
         $('dayTitle').textContent = `➕ Добавить данные: ${date}`;
@@ -1052,7 +1065,8 @@ const App = (() => {
       buyQ:+$('dayBuyQ').value||0, buyS:+$('dayBuyS').value||0,
       shows:+$('dayShows').value||0, clicks:+$('dayClicks').value||0, cart:+$('dayCart').value||0,
       adsShows:+$('dayAdsShows').value||0, adsClicks:+$('dayAdsClicks').value||0, adsSpend:+$('dayAdsSpend').value||0,
-      spp:+$('daySpp').value||0, giveaway:+$('dayGiveaway').value||0, source:'manual'
+      spp:+$('daySpp').value||0, giveaway:+$('dayGiveaway').value||0,
+      returnQ:+$('dayReturnQ').value||0, storageCost:+$('dayStorageCost').value||0, source:'manual'
     };
     if(!rec.date||!rec.sku){toast('Укажи дату и SKU');return;}
     // Prefer matching by dId first, then by date+sku (any source)
@@ -1197,8 +1211,8 @@ const App = (() => {
   }
 
   // ---- CSV template & import ----
-  const CSV_COLS = ['date','sku','ordQ','ordS','buyQ','buyS','stock','shows','clicks','cart','adsShows','adsClicks','adsSpend','spp','giveaway'];
-  const CSV_LABELS = ['Дата (ГГГГ-ММ-ДД)','SKU товара','Заказы шт','Заказы руб','Продажи шт','Продажи руб','Остаток шт','Показы','Клики','Корзина шт','Показы РК','Клики РК','Расход РК руб','СПП %','Раздачи шт'];
+  const CSV_COLS = ['date','sku','ordQ','ordS','buyQ','buyS','stock','shows','clicks','cart','adsShows','adsClicks','adsSpend','spp','giveaway','returnQ','storageCost'];
+  const CSV_LABELS = ['Дата (ГГГГ-ММ-ДД)','SKU товара','Заказы шт','Заказы руб','Продажи шт','Продажи руб','Остаток шт','Показы','Клики','Корзина шт','Показы РК','Клики РК','Расход РК руб','СПП %','Раздачи шт','Возвраты шт','Хранение руб'];
 
   function downloadTemplate() {
     // Пустой шаблон для ручного заполнения
@@ -1251,7 +1265,7 @@ const App = (() => {
       const lines = e.target.result.split(/\r?\n/).filter(l => l.trim() && !l.startsWith('#'));
       if (lines.length < 2) return toast('CSV пустой или неверный формат');
       // определяем заголовок
-      const header = lines[0].split(',').map(s => s.trim());
+      const header = lines[0].replace(/^﻿/, '').split(',').map(s => s.trim());
       // поддерживаем и английские ключи (date,sku,...) и русские метки из шаблона
       const idxOf = key => {
         const engIdx = header.findIndex(h => h.toLowerCase() === key.toLowerCase());
@@ -1271,7 +1285,7 @@ const App = (() => {
         const date = get('date'); const sku = get('sku');
         if (!date || !sku) continue;
         const id = 'imp' + date + sku;
-        const rec = { id, date, sku, ordQ:num('ordQ'), ordS:num('ordS'), buyQ:num('buyQ'), buyS:num('buyS'), stock:num('stock'), shows:num('shows'), clicks:num('clicks'), cart:num('cart'), adsShows:num('adsShows'), adsClicks:num('adsClicks'), adsSpend:num('adsSpend'), spp:num('spp'), giveaway:num('giveaway'), source:'import' };
+        const rec = { id, date, sku, ordQ:num('ordQ'), ordS:num('ordS'), buyQ:num('buyQ'), buyS:num('buyS'), stock:num('stock'), shows:num('shows'), clicks:num('clicks'), cart:num('cart'), adsShows:num('adsShows'), adsClicks:num('adsClicks'), adsSpend:num('adsSpend'), spp:num('spp'), giveaway:num('giveaway'), returnQ:num('returnQ'), storageCost:num('storageCost'), source:'import' };
         const existing = db.days.findIndex(d => d.id === id);
         if (existing >= 0) { db.days[existing] = rec; updated++; } else { db.days.push(rec); added++; }
       }

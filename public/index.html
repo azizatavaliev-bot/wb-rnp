@@ -58,7 +58,7 @@
       <div style="font-size:18px;font-weight:700;margin-bottom:8px;color:var(--fg)">Нет товаров</div>
       <div style="font-size:14px;color:var(--muted);margin-bottom:28px">Добавь товар во вкладке «Товары и план» или попробуй демо-режим</div>
       <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-        <button class="btn" onclick="App.switchTo('p-products')" style="font-size:14px;padding:12px 24px">🏷 Добавить товар</button>
+        <button class="btn" onclick="App.switchTo('products')" style="font-size:14px;padding:12px 24px">🏷 Добавить товар</button>
         <button class="btn ghost" onclick="App.loadDemo()" style="font-size:14px;padding:12px 24px">🎯 Загрузить демо-данные</button>
       </div>
     </div>
@@ -266,7 +266,7 @@
     <!-- Quick actions -->
     <div class="h-quick">
       <button class="h-qbtn" onclick="App.switchTo('rnp')">📊 Перейти в РНП</button>
-      <button class="h-qbtn" onclick="App.switchTo('products')">🏷 Добавить товар</button>
+      <button class="h-qbtn" onclick="App.addProduct()">🏷 Добавить товар</button>
       <button class="h-qbtn" onclick="App.openDay()">＋ Внести день</button>
       <button class="h-qbtn" onclick="App.downloadTemplate()">📋 Скачать шаблон</button>
       <button class="h-qbtn" onclick="App.switchTo('settings')">⚙️ Настройки</button>
@@ -597,6 +597,14 @@
       <div class="fld"><label>Показы РК</label><input type="number" id="dayAdsShows" min="0" placeholder="0"></div>
       <div class="fld"><label>Клики РК</label><input type="number" id="dayAdsClicks" min="0" placeholder="0"></div>
       <div class="fld"><label>Расход РК, ₽</label><input type="number" id="dayAdsSpend" min="0" placeholder="0"></div>
+    </div>
+  </div>
+
+  <!-- Возвраты и хранение -->
+  <div class="msec"><div class="msec-t">↩️ Возвраты и хранение</div>
+    <div class="grid3" style="padding:14px">
+      <div class="fld"><label>Возвраты, шт</label><input type="number" id="dayReturnQ" min="0" placeholder="0"></div>
+      <div class="fld"><label>Хранение, ₽</label><input type="number" id="dayStorageCost" min="0" placeholder="0"></div>
     </div>
   </div>
 
