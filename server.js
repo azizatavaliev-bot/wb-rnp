@@ -328,13 +328,18 @@ const server = http.createServer(async (req, res) => {
 
   // ---- Demo auto-login ----
   if (p === '/demo') {
+    ensureDemoUser(); // создать если нет (после рестарта Railway)
     const users = loadUsers();
-    const user = users.find(u => u.email === 'demo@rnp.ru');
-    if (user) {
-      const token = genToken();
-      sessions.set(token, { userId: user.id, email: user.email, name: user.name, expires: Date.now() + 30*24*3600*1000 });
-      setCookie(res, token);
+    let user = users.find(u => u.email === 'demo@rnp.ru');
+    if (!user) {
+      // крайний случай — создать прямо сейчас
+      const salt = crypto.randomBytes(16).toString('hex');
+      user = { id:'demo', email:'demo@rnp.ru', name:'Демо-магазин', passHash:hashPass('demo123',salt), salt, createdAt:new Date().toISOString() };
+      users.push(user); saveUsers(users); seedUserDemo('demo');
     }
+    const token = genToken();
+    sessions.set(token, { userId: user.id, email: user.email, name: user.name, expires: Date.now() + 30*24*3600*1000 });
+    setCookie(res, token);
     return redirect(res, '/');
   }
 
