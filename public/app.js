@@ -50,6 +50,44 @@ const App = (() => {
       spp:avg('spp'), giveaway:sum('giveaway'), n:sub.length };
   }
 
+  function factAllOf(monthDays, skus, dates) {
+    const z = {ordQ:0,ordS:0,buyQ:0,buyS:0,stock:0,shows:0,clicks:0,cart:0,adsShows:0,adsClicks:0,adsSpend:0,spp:0,giveaway:0,n:0};
+    for (const sku of skus) {
+      const f = factOf(monthDays, sku, dates);
+      z.ordQ+=f.ordQ; z.ordS+=f.ordS; z.buyQ+=f.buyQ; z.buyS+=f.buyS;
+      z.stock+=f.stock; z.shows+=f.shows; z.clicks+=f.clicks; z.cart+=f.cart;
+      z.adsShows+=f.adsShows; z.adsClicks+=f.adsClicks; z.adsSpend+=f.adsSpend;
+      z.giveaway+=f.giveaway; z.n+=f.n;
+    }
+    const sppNum = skus.reduce((a,sku) => { const f=factOf(monthDays,sku,dates); return a+f.spp*f.buyQ; }, 0);
+    z.spp = z.buyQ>0 ? sppNum/z.buyQ : 0;
+    return z;
+  }
+
+  function econAllOf(monthDays, products, dates, tax) {
+    let kPerech=0, profit=0, adsSpend=0, buyS=0, buyQ=0, ordQ=0, shows=0, clicks=0;
+    for (const p of products) {
+      const f = factOf(monthDays, p.sku, dates);
+      const e = econOf(f, p, tax);
+      kPerech += e.kPerech;
+      profit  += e.profit;
+      adsSpend += f.adsSpend;
+      buyS  += f.buyS;
+      buyQ  += f.buyQ;
+      ordQ  += f.ordQ;
+      shows += f.shows;
+      clicks += f.clicks;
+    }
+    return {
+      kPerech, profit, adsSpend,
+      drr:    buyS>0  ? adsSpend/buyS*100    : 0,
+      margin: buyS>0  ? profit/buyS*100      : 0,
+      ctr:    shows>0 ? clicks/shows*100     : 0,
+      buyoutPct: ordQ>0 ? buyQ/ordQ*100 : 0,
+      ordQ, buyQ, buyS, shows, clicks
+    };
+  }
+
   function econOf(f, p, tax) {
     const rev  = f.buyS;
     const comm = rev * (p.commission||0) / 100;
@@ -92,6 +130,38 @@ const App = (() => {
     </svg>`;
   }
 
+  // ---- Category filter ----
+  let activeCategory = null;
+
+  function buildCategoryTabs() {
+    const cats = [...new Set(db.products.map(p => p.category).filter(Boolean))].sort();
+    const tabs = $('sheetTabs');
+    if (!tabs) return;
+    // Удалить старые cat-tab
+    tabs.querySelectorAll('.cat-tab').forEach(t => t.remove());
+    if (!cats.length) return;
+    // Вставить перед кнопкой настроек
+    const settingsTab = tabs.querySelector('[data-p="settings"]');
+    cats.forEach(cat => {
+      const btn = document.createElement('button');
+      btn.className = 'sheet-tab cat-tab';
+      btn.dataset.p = 'rnp';
+      btn.dataset.cat = cat;
+      btn.textContent = cat;
+      btn.addEventListener('click', () => filterByCategory(cat, btn));
+      tabs.insertBefore(btn, settingsTab);
+    });
+  }
+
+  function filterByCategory(cat, btn) {
+    document.querySelectorAll('.sheet-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    $('p-rnp').classList.add('active');
+    activeCategory = cat;
+    render();
+  }
+
   // ---- render ----
   function renderRnp() {
     const ym = curMonth();
@@ -103,12 +173,20 @@ const App = (() => {
     const monthDays = db.days.filter(d => d.date?.startsWith(ym));
     const monthDates = Array.from({length:daysInMonth}, (_,i) => `${ym}-${String(i+1).padStart(2,'0')}`);
 
-    if (!db.products.length) {
+    const filteredProducts = activeCategory
+      ? db.products.filter(p => p.category === activeCategory)
+      : db.products;
+
+    if (!filteredProducts.length) {
       $('rnpEmpty').style.display = ''; $('rnpBlocks').innerHTML = ''; return;
     }
     $('rnpEmpty').style.display = 'none';
     try {
-      $('rnpBlocks').innerHTML = db.products.map(p =>
+      let summaryHtml = '';
+      if (filteredProducts.length > 1) {
+        summaryHtml = buildSummaryBlock(filteredProducts, ym, weeks, daysInMonth, monthDays, monthDates, tax, usd);
+      }
+      $('rnpBlocks').innerHTML = summaryHtml + filteredProducts.map(p =>
         buildProdBlock(p, ym, weeks, daysInMonth, monthDays, monthDates, planM, tax, usd)
       ).join('');
     } catch(e) {
@@ -116,7 +194,228 @@ const App = (() => {
     }
   }
 
+  function buildSummaryBlock(products, ym, weeks, daysInMonth, monthDays, monthDates, tax, usd) {
+    const [y, m] = ym.split('-').map(Number);
+    const skus = products.map(p => p.sku);
+
+    const fTotAll = factAllOf(monthDays, skus, null);
+    const eTotAll = econAllOf(monthDays, products, null, tax);
+
+    // per-week
+    const wkFAll = weeks.map(wDays => factAllOf(monthDays, skus, wDays.map(d=>`${ym}-${String(d).padStart(2,'0')}`)));
+    const wkEAll = weeks.map(wDays => econAllOf(monthDays, products, wDays.map(d=>`${ym}-${String(d).padStart(2,'0')}`), tax));
+
+    // per-day
+    const dayFAll = monthDates.map(date => factAllOf(monthDays, skus, [date]));
+    const dayEAll = monthDates.map(date => econAllOf(monthDays, products, [date], tax));
+
+    // avg (per recorded day)
+    const uniqDatesAll = [...new Set(monthDays.map(d=>d.date))];
+    const cntAll = uniqDatesAll.length || 1;
+    const avgFAll = {
+      ordQ:fTotAll.ordQ/cntAll, ordS:fTotAll.ordS/cntAll, buyQ:fTotAll.buyQ/cntAll, buyS:fTotAll.buyS/cntAll,
+      shows:fTotAll.shows/cntAll, clicks:fTotAll.clicks/cntAll, cart:fTotAll.cart/cntAll,
+      adsShows:fTotAll.adsShows/cntAll, adsClicks:fTotAll.adsClicks/cntAll, adsSpend:fTotAll.adsSpend/cntAll,
+      spp:fTotAll.spp, giveaway:fTotAll.giveaway/cntAll, stock:fTotAll.stock, n:1
+    };
+    const avgEAll = econAllOf(monthDays, products, null, tax); // just use total ratios for avg display
+    // avg econ per day
+    const avgEAllDay = {
+      kPerech: eTotAll.kPerech/cntAll, profit: eTotAll.profit/cntAll,
+      drr: eTotAll.drr, margin: eTotAll.margin, ctr: eTotAll.ctr,
+      buyoutPct: eTotAll.buyoutPct,
+      ctrRk: fTotAll.adsShows>0 ? fTotAll.adsClicks/fTotAll.adsShows*100 : 0,
+      ordPct: fTotAll.clicks>0 ? fTotAll.ordQ/fTotAll.clicks*100 : 0,
+      cartPct: fTotAll.clicks>0 ? fTotAll.cart/fTotAll.clicks*100 : 0,
+      cro: fTotAll.shows>0 ? fTotAll.ordQ/fTotAll.shows*100 : 0,
+      cpc: fTotAll.adsClicks>0 ? fTotAll.adsSpend/fTotAll.adsClicks : 0,
+      croRk: fTotAll.adsClicks>0 ? fTotAll.buyQ/fTotAll.adsClicks*100 : 0,
+      avgCheck: fTotAll.ordQ>0 ? fTotAll.ordS/fTotAll.ordQ : 0,
+    };
+
+    const today = new Date().toISOString().slice(0,10);
+    const dayNums = Array.from({length:daysInMonth}, (_,i)=>i+1);
+    const WK = 5;
+    const totalCols = 1 + 1 + 1 + WK + 1 + daysInMonth;
+
+    // -- HEADER --
+    const kPerechUsd = usd>0 ? eTotAll.kPerech/usd : 0;
+    const header = `<div class="ph ph-summary">
+      <table class="ph-t"><tbody>
+        <tr>
+          <td class="ph-name ph-name-sum" rowspan="3">📊 СВОДНАЯ<br><span class="ph-sub">${products.length} товаров · ${ym}</span></td>
+          <td class="ph-lbl">К перечислению</td><td class="ph-val">${fmt(eTotAll.kPerech)} ₽</td>
+          <td class="ph-lbl">ДРР %</td><td class="ph-val ${eTotAll.drr>25?'r':'g'}">${fmtP(eTotAll.drr)}</td>
+          <td class="ph-lbl">Маржа %</td><td class="ph-val ${eTotAll.margin<0?'r':'g'}">${fmtP(eTotAll.margin)}</td>
+          <td class="ph-lbl">Прибыль</td><td class="ph-val ${eTotAll.profit<0?'r':'g'}">${fmt(eTotAll.profit)} ₽</td>
+          <td class="ph-lbl">CTR %</td><td class="ph-val">${fmtP(eTotAll.ctr,2)}</td>
+        </tr>
+        <tr>
+          <td class="ph-lbl">В деньгах</td><td class="ph-val">${fmt(eTotAll.kPerech)} ₽</td>
+          <td class="ph-lbl">Выкупы, шт</td><td class="ph-val">${fmt(fTotAll.buyQ)}</td>
+          <td class="ph-lbl">Выкуп %</td><td class="ph-val">${fmtP(eTotAll.buyoutPct)}</td>
+          <td class="ph-lbl">Остаток (сумма)</td><td class="ph-val">${fmt(fTotAll.stock)} шт</td>
+          <td class="ph-lbl">Заказов, шт</td><td class="ph-val">${fmt(fTotAll.ordQ)}</td>
+        </tr>
+        <tr>
+          <td class="ph-lbl">В долларах</td><td class="ph-val">${fmt(kPerechUsd,0)} $</td>
+          <td class="ph-lbl">Показы</td><td class="ph-val">${fmt(fTotAll.shows)}</td>
+          <td class="ph-lbl">Клики</td><td class="ph-val">${fmt(fTotAll.clicks)}</td>
+          <td class="ph-lbl">Реклама ₽</td><td class="ph-val">${fmt(fTotAll.adsSpend)}</td>
+          <td class="ph-lbl">Выручка ₽</td><td class="ph-val">${fmt(fTotAll.buyS)}</td>
+        </tr>
+      </tbody></table>
+    </div>`;
+
+    // col headers (same as buildProdBlock)
+    const wkThs = Array.from({length:WK}, (_,i) => `<th class="c-wk">Нед. ${i+1}</th>`).join('');
+    const DOW = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+    const dayDow = dayNums.map(d => new Date(y, m-1, d).getDay());
+    const dayThs = dayNums.map((d, i) => {
+      const date = `${ym}-${String(d).padStart(2,'0')}`;
+      const dw = dayDow[i];
+      const dow = DOW[dw];
+      const clsArr = [];
+      if (date === today) clsArr.push('today-col');
+      if (dw === 6) clsArr.push('c-sat');
+      if (dw === 0) clsArr.push('c-sun');
+      const cls = clsArr.length ? ` class="${clsArr.join(' ')}"` : '';
+      return `<th${cls} title="${date}"><span class="th-dow">${dow}</span><br>${String(d).padStart(2,'0')}</th>`;
+    }).join('');
+    const colgroup = `<colgroup>
+      <col style="width:148px"><col style="width:86px"><col style="width:80px">
+      ${Array(WK).fill('<col style="width:68px">').join('')}
+      <col style="width:78px">
+      ${Array(daysInMonth).fill('<col style="width:36px">').join('')}
+    </colgroup>`;
+    const thead = `<thead><tr class="th-row">
+      <th class="c-name" style="text-align:left">Показатель</th>
+      <th class="c-spark">Тренд</th>
+      <th class="c-avg">СР.Знач</th>
+      ${wkThs}
+      <th class="c-tot">ИТОГО</th>
+      ${dayThs}
+    </tr></thead>`;
+
+    const rows = [];
+    let _currentSection = '';
+    let _rowIdx = 0;
+    const H = (db.settings || {}).hidden || {};
+
+    function secRowS(label, secCls) {
+      _currentSection = secCls || '';
+      _rowIdx = 0;
+      if (H[secCls]) return;
+      rows.push(`<tr class="sec-sep ${secCls||''}"><td colspan="${totalCols}">${label}</td></tr>`);
+    }
+
+    function mkSparkS(dayVals, up=true) {
+      const vals = dayVals.map(v => isFinite(v)?v:0);
+      const lastNonZero = vals.slice().reverse().findIndex(v=>v>0);
+      const sliced = lastNonZero >= 0 ? vals.slice(0, vals.length - lastNonZero) : vals;
+      if (sliced.every(v=>v===0)) return '';
+      const color = up
+        ? (sliced[sliced.length-1] >= sliced.find(v=>v>0) ? '#1e8e3e' : '#d93025')
+        : (sliced[sliced.length-1] <= sliced.find(v=>v>0) ? '#1e8e3e' : '#d93025');
+      return sparkline(sliced, 84, 22, color);
+    }
+
+    function rowS(label, avg_, wkVals, tot, dayVals, fmtFn, {cls} = {}) {
+      if (H[_currentSection]) return;
+      const wkCells = Array.from({length:WK}, (_,i) => {
+        const v = wkVals[i];
+        const s = (v != null && v !== 0 && isFinite(v)) ? fmtFn(v) : '<span class="z">—</span>';
+        return `<td class="c-wk">${s}</td>`;
+      }).join('');
+      const dayCells = dayVals.map((v, di) => {
+        const s = (v && isFinite(v) && v !== 0) ? fmtFn(v) : '<span class="z">—</span>';
+        const date = `${ym}-${String(di+1).padStart(2,'0')}`;
+        const dw = dayDow[di];
+        const tclsArr = [];
+        if (date === today) tclsArr.push('today-col');
+        if (dw === 6) tclsArr.push('c-sat');
+        if (dw === 0) tclsArr.push('c-sun');
+        const tcls = tclsArr.length ? ` class="${tclsArr.join(' ')}"` : '';
+        return `<td${tcls}>${s}</td>`;
+      }).join('');
+      const avgS = (avg_ != null && isFinite(avg_) && avg_ !== 0) ? fmtFn(avg_) : '';
+      const totS = (tot  != null && isFinite(tot)  && tot  !== 0) ? fmtFn(tot)  : '';
+      const spark = mkSparkS(dayVals);
+      const secR = _currentSection ? _currentSection.replace('sep-','r-') : '';
+      const evenOdd = (_rowIdx++ % 2 === 0) ? 'r-even' : 'r-odd';
+      const allCls = [secR, evenOdd, cls].filter(Boolean).join(' ');
+      const trCls = allCls ? ` class="${allCls}"` : '';
+      rows.push(`<tr${trCls}>
+        <td class="c-name">${label}</td>
+        <td class="c-spark">${spark}</td>
+        <td class="c-avg">${avgS}</td>
+        ${wkCells}
+        <td class="c-tot">${totS}</td>
+        ${dayCells}
+      </tr>`);
+    }
+
+    // -- SECTION: ЗАКАЗЫ --
+    secRowS('▸ ЗАКАЗЫ [все товары]', 'sep-orders');
+    rowS('ЗАКАЗЫ, шт', avgFAll.ordQ, wkFAll.map(f=>f.ordQ), fTotAll.ordQ, dayFAll.map(f=>f.ordQ), fmt);
+    rowS('СПП %', avgFAll.spp, wkFAll.map(f=>f.spp), fTotAll.spp, dayFAll.map(f=>f.spp), v=>fmtP(v,2));
+    rowS('Продажи (выкупы), шт', avgFAll.buyQ, wkFAll.map(f=>f.buyQ), fTotAll.buyQ, dayFAll.map(f=>f.buyQ), fmt);
+    rowS('СР. Чек ₽', avgEAllDay.avgCheck, wkFAll.map(f=>f.ordQ>0?f.ordS/f.ordQ:0), fTotAll.ordQ>0?fTotAll.ordS/fTotAll.ordQ:0, dayFAll.map(f=>f.ordQ>0?f.ordS/f.ordQ:0), v=>fmt(v,0));
+    rowS('Раздачи, шт', avgFAll.giveaway, wkFAll.map(f=>f.giveaway), fTotAll.giveaway, dayFAll.map(f=>f.giveaway), fmt);
+    rowS('Сумма Заказов ₽', avgFAll.ordS, wkFAll.map(f=>f.ordS), fTotAll.ordS, dayFAll.map(f=>f.ordS), fmt);
+    rowS('Сумма Продаж ₽', avgFAll.buyS, wkFAll.map(f=>f.buyS), fTotAll.buyS, dayFAll.map(f=>f.buyS), fmt);
+
+    // -- SECTION: ВОРОНКА --
+    secRowS('▸ ПОКАЗАТЕЛИ ВОРОНКИ ОБЩАЯ [все товары]', 'sep-funnel');
+    rowS('Показы', avgFAll.shows, wkFAll.map(f=>f.shows), fTotAll.shows, dayFAll.map(f=>f.shows), fmt);
+    rowS('Клики', avgFAll.clicks, wkFAll.map(f=>f.clicks), fTotAll.clicks, dayFAll.map(f=>f.clicks), fmt);
+    rowS('% органики кликов', null, wkFAll.map(f=>f.clicks>0?(f.clicks-f.adsClicks)/f.clicks*100:null),
+      fTotAll.clicks>0?(fTotAll.clicks-fTotAll.adsClicks)/fTotAll.clicks*100:null,
+      dayFAll.map(f=>f.clicks>0?(f.clicks-f.adsClicks)/f.clicks*100:null), v=>fmtP(v,1));
+    rowS('CTR %', avgEAllDay.ctr, wkEAll.map(e=>e.ctr), eTotAll.ctr, dayEAll.map(e=>e.ctr), v=>fmtP(v,2));
+    rowS('Корзина, шт', avgFAll.cart, wkFAll.map(f=>f.cart), fTotAll.cart, dayFAll.map(f=>f.cart), fmt);
+    rowS('Корзина %', avgEAllDay.cartPct, wkFAll.map(f=>f.clicks>0?f.cart/f.clicks*100:0),
+      fTotAll.clicks>0?fTotAll.cart/fTotAll.clicks*100:0,
+      dayFAll.map(f=>f.clicks>0?f.cart/f.clicks*100:0), v=>fmtP(v,2));
+
+    // -- SECTION: ВОРОНКА РК --
+    secRowS('▸ ПОКАЗАТЕЛИ ВОРОНКИ РЕКЛАМЫ [все товары]', 'sep-ads-funnel');
+    rowS('Показы с РК', avgFAll.adsShows, wkFAll.map(f=>f.adsShows), fTotAll.adsShows, dayFAll.map(f=>f.adsShows), fmt);
+    rowS('Клики РК', avgFAll.adsClicks, wkFAll.map(f=>f.adsClicks), fTotAll.adsClicks, dayFAll.map(f=>f.adsClicks), fmt);
+    rowS('CTR % РК', avgEAllDay.ctrRk, wkFAll.map(f=>f.adsShows>0?f.adsClicks/f.adsShows*100:0),
+      fTotAll.adsShows>0?fTotAll.adsClicks/fTotAll.adsShows*100:0,
+      dayFAll.map(f=>f.adsShows>0?f.adsClicks/f.adsShows*100:0), v=>fmtP(v,2));
+    rowS('CRO РК %', avgEAllDay.croRk, wkFAll.map(f=>f.adsClicks>0?f.buyQ/f.adsClicks*100:0),
+      fTotAll.adsClicks>0?fTotAll.buyQ/fTotAll.adsClicks*100:0,
+      dayFAll.map(f=>f.adsClicks>0?f.buyQ/f.adsClicks*100:0), v=>fmtP(v,2));
+    rowS('Стоимость клика ₽', avgEAllDay.cpc, wkFAll.map(f=>f.adsClicks>0?f.adsSpend/f.adsClicks:0),
+      fTotAll.adsClicks>0?fTotAll.adsSpend/fTotAll.adsClicks:0,
+      dayFAll.map(f=>f.adsClicks>0?f.adsSpend/f.adsClicks:0), v=>fmt(v,1));
+
+    // -- SECTION: ДРР --
+    secRowS('▸ ДОЛЯ РЕКЛАМНЫХ РАСХОДОВ [все товары]', 'sep-ads');
+    rowS('Расход РК ₽', avgFAll.adsSpend, wkFAll.map(f=>f.adsSpend), fTotAll.adsSpend, dayFAll.map(f=>f.adsSpend), fmt);
+    rowS('ДРР %', eTotAll.drr, wkEAll.map(e=>e.drr), eTotAll.drr, dayEAll.map(e=>e.drr), v=>fmtP(v,1));
+
+    // -- SECTION: ФИН --
+    secRowS('▸ ФИН. ПОКАЗАТЕЛИ [все товары]', 'sep-fin');
+    rowS('Продаж, шт', avgFAll.buyQ, wkFAll.map(f=>f.buyQ), fTotAll.buyQ, dayFAll.map(f=>f.buyQ), fmt);
+    rowS('Сумма продаж ₽', avgFAll.buyS, wkFAll.map(f=>f.buyS), fTotAll.buyS, dayFAll.map(f=>f.buyS), fmt);
+    rowS('Выкуп %', eTotAll.buyoutPct, wkEAll.map(e=>e.buyoutPct), eTotAll.buyoutPct, dayEAll.map(e=>e.buyoutPct), v=>fmtP(v,1));
+    rowS('К перечислению ₽', eTotAll.kPerech/cntAll, wkEAll.map(e=>e.kPerech), eTotAll.kPerech, dayEAll.map(e=>e.kPerech), v=>fmt(v,0));
+    rowS('Прибыль ₽', eTotAll.profit/cntAll, wkEAll.map(e=>e.profit), eTotAll.profit, dayEAll.map(e=>e.profit), v=>fmt(v,0));
+    rowS('Маржа %', eTotAll.margin, wkEAll.map(e=>e.margin), eTotAll.margin, dayEAll.map(e=>e.margin), v=>fmtP(v,1));
+    rowS('Остаток (сумма), шт', null, wkFAll.map(f=>f.stock), fTotAll.stock, dayFAll.map(f=>f.stock), fmt);
+
+    const table = `<div class="pg-wrap">
+      <table class="pg">${colgroup}${thead}<tbody>${rows.join('')}</tbody></table>
+    </div>`;
+
+    return `<div class="prod-block prod-block-summary">${header}${table}</div>`;
+  }
+
   function buildProdBlock(p, ym, weeks, daysInMonth, monthDays, monthDates, planM, tax, usd) {
+    const [y, m] = ym.split('-').map(Number);
     const fTot = factOf(monthDays, p.sku, null);
     const eTot = econOf(fTot, p, tax);
     const plan = planM[p.sku] || {};
@@ -183,6 +482,33 @@ const App = (() => {
           <td colspan="4"><button class="ph-btn" onclick="App.openDay('${esc(p.sku)}')">＋ День</button>&nbsp;<button class="ph-btn" onclick="App.editProduct('${p.id}')">✏️ Товар</button></td>
         </tr>
       </tbody></table>
+    ${p.sizes && p.sizes.length ? `
+    <div class="ph-sizes">
+      <table class="ph-sz-t">
+        <thead><tr>
+          <th class="ph-sz-lbl">Размер</th>
+          ${p.sizes.map(s => `<th>${esc(s.size)}</th>`).join('')}
+          <th>Общий</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="ph-sz-lbl">На складах</td>
+            ${p.sizes.map(s => `<td class="${s.stock < 10 ? 'r' : s.stock < 30 ? 'o' : 'g'}">${s.stock}</td>`).join('')}
+            <td><b>${p.sizes.reduce((a,s) => a+s.stock, 0)}</b></td>
+          </tr>
+          <tr>
+            <td class="ph-sz-lbl">В пути</td>
+            ${p.sizes.map(s => `<td>${s.inTransit || 0}</td>`).join('')}
+            <td><b>${p.sizes.reduce((a,s) => a+(s.inTransit||0), 0)}</b></td>
+          </tr>
+          <tr>
+            <td class="ph-sz-lbl">Общий</td>
+            ${p.sizes.map(s => `<td>${(s.stock||0)+(s.inTransit||0)}</td>`).join('')}
+            <td><b>${p.sizes.reduce((a,s) => a+(s.stock||0)+(s.inTransit||0), 0)}</b></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>` : ''}
     </div>`;
 
     // -- TABLE --
@@ -199,7 +525,7 @@ const App = (() => {
       if (dw === 6) clsArr.push('c-sat');
       if (dw === 0) clsArr.push('c-sun');
       const cls = clsArr.length ? ` class="${clsArr.join(' ')}"` : '';
-      return `<th${cls} title="${date}"><span class="th-dow">${dow}</span><br>${String(d).padStart(2,'0')}</th>`;
+      return `<th${cls} title="${date}" onclick="App.openDayEdit('${p.sku}', '${date}')" style="cursor:pointer"><span class="th-dow">${dow}</span><br>${String(d).padStart(2,'0')}<span class="day-edit-btn">✎</span></th>`;
     }).join('');
     const colgroup = `<colgroup>
       <col style="width:148px"><col style="width:86px"><col style="width:80px">
@@ -492,28 +818,61 @@ const App = (() => {
 
   // ---- init ----
   async function init() {
-    $('month').value = new Date().toISOString().slice(0,7);
+    // Check auth
+    try {
+      const me = await fetch('/api/auth/me').then(r => r.json());
+      if (!me || !me.user) { window.location.href = '/login.html'; return; }
+      const ui = $('userInfo');
+      if (ui) ui.textContent = me.user.name;
+    } catch { window.location.href = '/login.html'; return; }
+
+    _setMonth(new Date().toISOString().slice(0,7));
     document.querySelectorAll('.sheet-tab').forEach(t => t.addEventListener('click', () => {
+      if (t.classList.contains('cat-tab')) return; // cat-tabs handled by filterByCategory
       document.querySelectorAll('.sheet-tab').forEach(x=>x.classList.remove('active'));
       document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
       t.classList.add('active'); $('p-'+t.dataset.p).classList.add('active');
+      if(t.dataset.p==='rnp') { activeCategory = null; render(); }
       if(t.dataset.p==='products') renderProducts();
       if(t.dataset.p==='settings') renderSettings();
     }));
     if(localStorage.getItem('theme')==='dark'){ document.body.classList.add('dark'); $('themeBtn').textContent='☀️'; }
-    await load(); render();
+    await load();
+    buildCategoryTabs();
+    render();
+  }
+
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login.html';
   }
 
   function render() { renderRnp(); }
 
   // ---- CRUD ----
   function addProduct() {
-    ['apName','apSku','apWbId','apPrice','apCost','apPkg','apLog','apComm','apBuyout','apPlanDrr','apManager']
+    ['apName','apSku','apWbId','apPrice','apCost','apPkg','apLog','apComm','apBuyout','apPlanDrr','apManager','apCategory']
       .forEach(id => { const el=$(id); if(el) el.value=''; });
     $('apComm').value = '15'; $('apBuyout').value = '70'; $('apPlanDrr').value = '15';
-if($('apStatus')) $('apStatus').value = '';
+    if($('apStatus')) $('apStatus').value = '';
+    if($('apSizesStock')) $('apSizesStock').value = '';
+    if($('apSizesTransit')) $('apSizesTransit').value = '';
     delete $('apSku').dataset.editId; // ensure create mode
     $('mAddProd').classList.add('open');
+  }
+  function parseSizes(stockStr, transitStr) {
+    const stockMap = {};
+    const transitMap = {};
+    if (stockStr) stockStr.split(',').forEach(s => {
+      const [sz, n] = s.trim().split(':');
+      if (sz && n) stockMap[sz.trim()] = parseInt(n)||0;
+    });
+    if (transitStr) transitStr.split(',').forEach(s => {
+      const [sz, n] = s.trim().split(':');
+      if (sz && n) transitMap[sz.trim()] = parseInt(n)||0;
+    });
+    const allSizes = [...new Set([...Object.keys(stockMap), ...Object.keys(transitMap)])];
+    return allSizes.map(sz => ({ size:sz, stock:stockMap[sz]||0, inTransit:transitMap[sz]||0 }));
   }
   function saveNewProduct() {
     const sku = $('apSku').value.trim();
@@ -531,6 +890,8 @@ if($('apStatus')) $('apStatus').value = '';
         p.planDrr = +$('apPlanDrr').value||0;
         p.manager = $('apManager').value.trim();
         p.status = $('apStatus') ? $('apStatus').value || 'НЕ ВЫБРАНО' : (p.status||'НЕ ВЫБРАНО');
+        p.category = $('apCategory') ? $('apCategory').value.trim() : (p.category || '');
+        p.sizes = parseSizes($('apSizesStock')?.value||'', $('apSizesTransit')?.value||'');
       }
       delete $('apSku').dataset.editId;
       save(); close('mAddProd'); renderProducts(); render(); toast('Товар обновлён ✓');
@@ -544,7 +905,9 @@ if($('apStatus')) $('apStatus').value = '';
         commission: +$('apComm').value||15, buyout: +$('apBuyout').value||70,
         planDrr: +$('apPlanDrr').value||0,
         manager: $('apManager').value.trim(),
-        status: $('apStatus') ? $('apStatus').value || 'НЕ ВЫБРАНО' : 'НЕ ВЫБРАНО'
+        status: $('apStatus') ? $('apStatus').value || 'НЕ ВЫБРАНО' : 'НЕ ВЫБРАНО',
+        category: $('apCategory') ? $('apCategory').value.trim() : '',
+        sizes: parseSizes($('apSizesStock')?.value||'', $('apSizesTransit')?.value||'')
       });
       save(); close('mAddProd'); renderProducts(); render(); toast('Товар добавлен ✓');
     }
@@ -564,6 +927,12 @@ if($('apStatus')) $('apStatus').value = '';
     $('apPlanDrr').value = p.planDrr ?? 0;
     $('apManager').value = p.manager || '';
     if($('apStatus')) $('apStatus').value = p.status || '';
+    if($('apCategory')) $('apCategory').value = p.category || '';
+    if($('apSizesStock') && p.sizes) {
+      $('apSizesStock').value = p.sizes.map(s => `${s.size}:${s.stock}`).join(', ');
+      const transit = p.sizes.filter(s=>s.inTransit>0);
+      if($('apSizesTransit')) $('apSizesTransit').value = transit.map(s => `${s.size}:${s.inTransit}`).join(', ');
+    }
     $('apSku').dataset.editId = id; // store editing id
     $('mAddProd').classList.add('open');
   }
@@ -594,6 +963,33 @@ if($('apStatus')) $('apStatus').value = '';
       .forEach(id=>{ const el=$(id); if(el)el.value=''; });
     $('skuList').innerHTML=db.products.map(p=>`<option value="${esc(p.sku)}">${esc(p.name||p.sku)}</option>`).join('');
     $('mDay').classList.add('open');
+  }
+  function openDayEdit(sku, date) {
+    const existing = db.days.find(d => d.sku === sku && d.date === date);
+    openDay(sku);
+    setTimeout(() => {
+      $('dayDate').value = date;
+      $('daySku').value = sku;
+      if (existing) {
+        $('dId').value = existing.id || '';
+        $('dayOrdQ').value = existing.ordQ || '';
+        $('dayOrdS').value = existing.ordS || '';
+        $('dayBuyQ').value = existing.buyQ || '';
+        $('dayBuyS').value = existing.buyS || '';
+        $('dayShows').value = existing.shows || '';
+        $('dayClicks').value = existing.clicks || '';
+        $('dayCart').value = existing.cart || '';
+        $('dayStock').value = existing.stock || '';
+        $('dayAdsShows').value = existing.adsShows || '';
+        $('dayAdsClicks').value = existing.adsClicks || '';
+        $('dayAdsSpend').value = existing.adsSpend || '';
+        $('daySpp').value = existing.spp || '';
+        $('dayGiveaway').value = existing.giveaway || '';
+        $('dayTitle').textContent = `✏️ Редактировать: ${date}`;
+      } else {
+        $('dayTitle').textContent = `➕ Добавить данные: ${date}`;
+      }
+    }, 50);
   }
   function saveDay() {
     const rec = {
@@ -653,17 +1049,61 @@ if($('apStatus')) $('apStatus').value = '';
   }
 
   // ---- Month navigation ----
-  function shiftMonth(delta) {
-    const el = $('month');
-    const [y, m] = (el.value || new Date().toISOString().slice(0,7)).split('-').map(Number);
-    const d = new Date(y, m - 1 + delta, 1);
-    const now = new Date();
-    const minYm = '2020-01';
-    const maxDate = new Date(now.getFullYear(), now.getMonth() + 12, 1);
-    if (d < new Date(2020, 0, 1)) return;
-    if (d > maxDate) return;
-    el.value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+  const MO_NAMES = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+  const MO_FULL  = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+  let _mpYear = new Date().getFullYear();
+
+  function _setMonth(ym) {
+    $('month').value = ym;
+    const [y,m] = ym.split('-').map(Number);
+    $('monthLabel').textContent = `${MO_FULL[m-1]} ${y} г.`;
     render();
+  }
+
+  function shiftMonth(delta) {
+    const [y, m] = (curMonth()).split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    if (d < new Date(2020, 0, 1)) return;
+    _setMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
+
+  function toggleMonthPicker(e) {
+    e.stopPropagation();
+    const p = $('monthPicker');
+    if (p.style.display === 'none') {
+      const [y] = curMonth().split('-').map(Number);
+      _mpYear = y;
+      _renderMpGrid();
+      p.style.display = 'block';
+      setTimeout(() => document.addEventListener('click', _mpClose, {once:true}), 0);
+    } else {
+      p.style.display = 'none';
+    }
+  }
+
+  function _mpClose() { $('monthPicker').style.display = 'none'; }
+
+  function mpShiftYear(d) {
+    _mpYear += d;
+    $('mpYear').textContent = _mpYear;
+    _renderMpGrid();
+  }
+
+  function _renderMpGrid() {
+    $('mpYear').textContent = _mpYear;
+    const hasData = new Set((db.days||[]).map(d => d.date?.slice(0,7)));
+    const cur = curMonth();
+    $('mpGrid').innerHTML = MO_NAMES.map((name, i) => {
+      const ym = `${_mpYear}-${String(i+1).padStart(2,'0')}`;
+      const has = hasData.has(ym);
+      const active = ym === cur;
+      return `<button class="mp-mo${active?' mp-cur':''}${has?' mp-has':''}" onclick="App._pickMonth('${ym}')">${name}</button>`;
+    }).join('');
+  }
+
+  function _pickMonth(ym) {
+    $('monthPicker').style.display = 'none';
+    _setMonth(ym);
   }
 
   // ---- Archive ----
@@ -760,12 +1200,12 @@ if($('apStatus')) $('apStatus').value = '';
     });
     if (targetTab === 'products') renderProducts();
     if (targetTab === 'settings') renderSettings();
-    if (targetTab === 'rnp') render();
+    if (targetTab === 'rnp') { activeCategory = null; render(); }
     if (isAddProduct) setTimeout(() => addProduct(), 50);
   }
 
   window.addEventListener('DOMContentLoaded', init);
-  return {render,openDay,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,wbTest,wbSync,theme,calcTestPrice,downloadTemplate,importCsv,handleCsvFile,shiftMonth,archiveMonth,toggleHidden,switchTo};
+  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,wbTest,wbSync,theme,calcTestPrice,downloadTemplate,importCsv,handleCsvFile,shiftMonth,archiveMonth,toggleHidden,switchTo,logout,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory};
 })();
 
 // Аккордеон инструкции (глобальные функции)

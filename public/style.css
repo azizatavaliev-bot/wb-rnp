@@ -84,6 +84,12 @@ body.dark .sheet-tabs { background: #1e1e1e; border-top-color: #3a3a3a; }
 body.dark .sheet-tab { background: #2a2a2a; color: #aaa; border-color: #444; }
 body.dark .sheet-tab.active { background: #1e1e1e; color: #7aaff4; border-color: #555; }
 
+/* Category tabs */
+.cat-tab { background: #e8f0fe !important; color: #1a56c4 !important; border-color: #c5d8f8 !important; }
+.cat-tab.active { background: #fff !important; color: #1a73e8 !important; }
+body.dark .cat-tab { background: #1a2a4a !important; color: #7aaff4 !important; border-color: #2a3a5a !important; }
+body.dark .cat-tab.active { background: #1e1e1e !important; color: #7aaff4 !important; }
+
 /* WRAP */
 .wrap { padding: 10px 14px; padding-bottom: 48px; margin-top: 44px; }
 .page { display: none; }
@@ -450,39 +456,32 @@ tr.sec-sep.sep-ads-funnel > td { background: #0277bd !important; color: #fff !im
 tr.sec-sep.sep-ads      > td { background: #e65100 !important; color: #fff !important; }
 tr.sec-sep.sep-fin      > td { background: #b71c1c !important; color: #fff !important; }
 
-/* ── Чётные строки (базовый фон) ── */
-tr.r-orders.r-even  > td { background-color: #e8f5e9; }
-tr.r-funnel.r-even  > td { background-color: #e3f2fd; }
-tr.r-ads-funnel.r-even > td { background-color: #e1f5fe; }
-tr.r-ads.r-even     > td { background-color: #fff8e1; }
-tr.r-fin.r-even     > td { background-color: #fce4ec; }
+/* ── Светлая тема: мягкие пастельные, не режут глаза ── */
+tr.r-orders.r-even  > td { background-color: #f2f9f3; }
+tr.r-funnel.r-even  > td { background-color: #f0f5ff; }
+tr.r-ads-funnel.r-even > td { background-color: #eef8ff; }
+tr.r-ads.r-even     > td { background-color: #fffcf0; }
+tr.r-fin.r-even     > td { background-color: #fff5f6; }
 
-/* ── Нечётные строки (чуть темнее) ── */
-tr.r-orders.r-odd  > td { background-color: #c8e6c9; }
-tr.r-funnel.r-odd  > td { background-color: #bbdefb; }
-tr.r-ads-funnel.r-odd > td { background-color: #b3e5fc; }
-tr.r-ads.r-odd     > td { background-color: #ffecb3; }
-tr.r-fin.r-odd     > td { background-color: #f8bbd0; }
+tr.r-orders.r-odd  > td { background-color: #e8f5eb; }
+tr.r-funnel.r-odd  > td { background-color: #e8f0fc; }
+tr.r-ads-funnel.r-odd > td { background-color: #e5f5fb; }
+tr.r-ads.r-odd     > td { background-color: #fdf7e3; }
+tr.r-fin.r-odd     > td { background-color: #fdeef0; }
 
-/* ── Sticky cols (имя + спарклайн) — перекрасить под секцию ── */
-tr.r-orders   > td.c-name, tr.r-orders   > td.c-spark { background-color: #a5d6a7 !important; }
-tr.r-funnel   > td.c-name, tr.r-funnel   > td.c-spark { background-color: #90caf9 !important; }
-tr.r-ads-funnel > td.c-name, tr.r-ads-funnel > td.c-spark { background-color: #81d4fa !important; }
-tr.r-ads      > td.c-name, tr.r-ads      > td.c-spark { background-color: #ffe082 !important; }
-tr.r-fin      > td.c-name, tr.r-fin      > td.c-spark { background-color: #f48fb1 !important; }
+/* Sticky cols — чуть акцентнее, но не кислотно */
+tr.r-orders   > td.c-name, tr.r-orders   > td.c-spark { background-color: #d5edd8 !important; }
+tr.r-funnel   > td.c-name, tr.r-funnel   > td.c-spark { background-color: #d0e6f8 !important; }
+tr.r-ads-funnel > td.c-name, tr.r-ads-funnel > td.c-spark { background-color: #c8e9f5 !important; }
+tr.r-ads      > td.c-name, tr.r-ads      > td.c-spark { background-color: #f0e0b0 !important; }
+tr.r-fin      > td.c-name, tr.r-fin      > td.c-spark { background-color: #f0cccc !important; }
 
-/* ── СР.Знач и ИТОГ тоже тинтовать ── */
-tr.r-orders   > td.c-avg { background-color: #dcedc8 !important; }
-tr.r-funnel   > td.c-avg { background-color: #c5cae9 !important; }
-tr.r-ads-funnel > td.c-avg { background-color: #b3e5fc !important; }
-tr.r-ads      > td.c-avg { background-color: #fff9c4 !important; }
-tr.r-fin      > td.c-avg { background-color: #f8bbd0 !important; }
-
-tr.r-orders   > td.c-wk { background-color: #d0ebd2 !important; }
-tr.r-funnel   > td.c-wk { background-color: #c5cae9 !important; }
-tr.r-ads-funnel > td.c-wk { background-color: #b3e5fc !important; }
-tr.r-ads      > td.c-wk { background-color: #fff9c4 !important; }
-tr.r-fin      > td.c-wk { background-color: #f8bbd0 !important; }
+/* СР.Знач и недели */
+tr.r-orders   > td.c-avg, tr.r-orders   > td.c-wk { background-color: #dff0e1 !important; }
+tr.r-funnel   > td.c-avg, tr.r-funnel   > td.c-wk { background-color: #d8eaf8 !important; }
+tr.r-ads-funnel > td.c-avg, tr.r-ads-funnel > td.c-wk { background-color: #d2ebf6 !important; }
+tr.r-ads      > td.c-avg, tr.r-ads      > td.c-wk { background-color: #f5e8c0 !important; }
+tr.r-fin      > td.c-avg, tr.r-fin      > td.c-wk { background-color: #f5d8d8 !important; }
 
 tr.r-orders   > td.c-tot { background-color: #b2dfdb !important; font-weight: 700; }
 tr.r-funnel   > td.c-tot { background-color: #9fa8da !important; font-weight: 700; }
@@ -504,22 +503,30 @@ tr.r-ads-funnel:hover > td { background-color: #4fc3f7 !important; }
 tr.r-ads:hover        > td { background-color: #ffd54f !important; }
 tr.r-fin:hover        > td { background-color: #f06292 !important; color: #fff; }
 
-/* ── Dark mode ── */
-body.dark tr.r-orders.r-even  > td { background-color: #1b3a1c; }
-body.dark tr.r-orders.r-odd   > td { background-color: #14291a; }
-body.dark tr.r-funnel.r-even  > td { background-color: #0d2040; }
-body.dark tr.r-funnel.r-odd   > td { background-color: #0a1830; }
-body.dark tr.r-ads-funnel.r-even > td { background-color: #0a1e35; }
-body.dark tr.r-ads-funnel.r-odd  > td { background-color: #071528; }
-body.dark tr.r-ads.r-even     > td { background-color: #2a1f00; }
-body.dark tr.r-ads.r-odd      > td { background-color: #1e1600; }
-body.dark tr.r-fin.r-even     > td { background-color: #2a0a0a; }
-body.dark tr.r-fin.r-odd      > td { background-color: #200808; }
-body.dark tr.r-orders   > td.c-name, body.dark tr.r-orders   > td.c-spark { background-color: #1b4d1c !important; }
-body.dark tr.r-funnel   > td.c-name, body.dark tr.r-funnel   > td.c-spark { background-color: #0d2a4f !important; }
-body.dark tr.r-ads-funnel > td.c-name, body.dark tr.r-ads-funnel > td.c-spark { background-color: #0a253d !important; }
-body.dark tr.r-ads      > td.c-name, body.dark tr.r-ads      > td.c-spark { background-color: #2a2000 !important; }
-body.dark tr.r-fin      > td.c-name, body.dark tr.r-fin      > td.c-spark { background-color: #300d0d !important; }
+/* ── Dark mode — нейтральные строки без резких цветов ── */
+body.dark tr.r-orders.r-even  > td,
+body.dark tr.r-funnel.r-even  > td,
+body.dark tr.r-ads-funnel.r-even > td,
+body.dark tr.r-ads.r-even     > td,
+body.dark tr.r-fin.r-even     > td { background-color: #1e1e1e; }
+
+body.dark tr.r-orders.r-odd  > td,
+body.dark tr.r-funnel.r-odd  > td,
+body.dark tr.r-ads-funnel.r-odd > td,
+body.dark tr.r-ads.r-odd     > td,
+body.dark tr.r-fin.r-odd     > td { background-color: #262626; }
+
+/* Первые колонки (название + тренд) — чуть темнее для разграничения */
+body.dark tr[class*="r-"] > td.c-name  { background-color: #1a1a1a !important; }
+body.dark tr[class*="r-"] > td.c-spark { background-color: #202020 !important; }
+
+/* Перебить светлые секционные цвета для c-avg / c-wk / c-tot в тёмной теме */
+body.dark tr[class*="r-"] > td.c-avg { background-color: #202020 !important; }
+body.dark tr[class*="r-"] > td.c-wk  { background-color: #1b2133 !important; }
+body.dark tr[class*="r-"] > td.c-tot { background-color: #182035 !important; }
+
+/* plan-row в тёмной теме */
+body.dark tr.plan-row > td { background-color: #1a1a1a !important; }
 
 /* ── Thead — день-колонки (нет специального класса) ── */
 .th-row th:not(.c-name):not(.c-spark):not(.c-avg):not(.c-wk):not(.c-tot) {
@@ -530,15 +537,49 @@ body.dark tr.r-fin      > td.c-name, body.dark tr.r-fin      > td.c-spark { back
 /* ── Сегодняшняя колонка — см. выше (единственный блок) ── */
 
 /* ===== MONTH NAV ===== */
-.month-nav { display: flex; align-items: center; gap: 4px; }
+.month-nav { display: flex; align-items: center; gap: 4px; position: relative; }
 .mnav-btn {
   background: none; border: 1px solid rgba(0,0,0,.18); border-radius: 4px;
   width: 26px; height: 26px; cursor: pointer; font-size: 15px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
   color: var(--ink); line-height: 1; transition: background .1s;
 }
-.mnav-btn:hover { background: rgba(0,0,0,.1); }
+.mnav-btn:hover { background: rgba(0,0,0,.08); }
 body.dark .mnav-btn { border-color: rgba(255,255,255,.25); }
+body.dark .mnav-btn:hover { background: rgba(255,255,255,.08); }
+
+.month-btn {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 4px;
+  height: 26px; padding: 0 10px; cursor: pointer; font: 600 12px var(--font);
+  color: var(--ink); white-space: nowrap; transition: background .1s;
+}
+.month-btn:hover { background: var(--bg3); }
+
+/* Custom month picker dropdown */
+.month-picker {
+  position: absolute; top: 34px; left: 0; z-index: 1000;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 10px; min-width: 200px;
+}
+.mp-year {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px; font-weight: 700; font-size: 13px; color: var(--ink);
+}
+.mp-year button {
+  background: none; border: none; cursor: pointer; font-size: 16px; font-weight: 700;
+  color: var(--ink); padding: 2px 8px; border-radius: 4px;
+}
+.mp-year button:hover { background: var(--bg3); }
+.mp-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.mp-mo {
+  background: none; border: 1px solid transparent; border-radius: 5px;
+  padding: 5px 2px; cursor: pointer; font: 500 12px var(--font); color: var(--muted);
+  transition: all .1s; text-align: center;
+}
+.mp-mo:hover { background: var(--bg3); color: var(--ink); }
+.mp-mo.mp-has { color: var(--ink); font-weight: 600; border-color: var(--line); }
+.mp-mo.mp-cur { background: var(--acc); color: #fff !important; border-color: var(--acc); font-weight: 700; }
+body.dark .mp-mo.mp-cur { color: #fff !important; }
 
 /* ===== ARCHIVE BADGE ===== */
 .arc-badge {
@@ -566,6 +607,12 @@ body.dark .prod-block { border-color: #444; }
 
 /* Кнопка внутри шапки */
 .ph-btn { font-size: 11.5px !important; padding: 3px 10px !important; border-radius: 3px !important; }
+
+/* Сводный блок */
+.prod-block-summary { border: 2px solid #1a73e8 !important; }
+.ph-summary { border-top: 3px solid #1a73e8; }
+.ph-name-sum { background: #0d47a1 !important; font-size: 15px !important; font-weight: 800 !important; }
+body.dark .ph-name-sum { background: #0a2f7a !important; }
 
 /* Статус-бейджи крупнее */
 .sts { font-size: 11px !important; padding: 2px 8px !important; border-radius: 3px !important; }
@@ -826,3 +873,49 @@ body.dark .h-fblock.orders { background: rgba(46,125,50,.08); }
 }
 .h-alert.r { background: rgba(198,40,40,.12); color: #c62828; border: 1px solid rgba(198,40,40,.3); }
 .h-alert.o { background: rgba(230,81,0,.1); color: #e65100; border: 1px solid rgba(230,81,0,.25); }
+
+/* ===== SETTINGS PAGE ===== */
+.settings-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 960px; }
+@media (max-width: 700px) { .settings-wrap { grid-template-columns: 1fr; } }
+.settings-col { display: flex; flex-direction: column; gap: 14px; }
+
+.s-card {
+  background: var(--bg2); border: 1px solid var(--line); border-radius: 10px;
+  overflow: hidden;
+}
+.s-card-hd {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px; border-bottom: 1px solid var(--line);
+  background: var(--bg3);
+}
+.s-card-icon { font-size: 20px; flex-shrink: 0; }
+.s-card-title { font-weight: 700; font-size: 13px; color: var(--ink); }
+.s-card-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.s-card-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.s-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+
+/* ===== INLINE DAY EDITING ===== */
+.th-row th { position: relative; }
+.day-edit-btn {
+  display: none; position: absolute; top: 2px; right: 2px;
+  font-size: 9px; opacity: 0.8; cursor: pointer; line-height: 1;
+  background: rgba(255,255,255,.2); border-radius: 2px; padding: 1px 2px;
+}
+.th-row th:hover .day-edit-btn { display: inline; }
+.th-row th:hover { cursor: pointer; }
+
+/* Sizes table in product header */
+.ph-sizes {
+  border-top: 1px solid rgba(255,255,255,.15);
+  overflow-x: auto;
+  padding: 6px 10px;
+}
+.ph-sz-t { border-collapse: collapse; font-size: 11px; color: var(--hdr-ink); }
+.ph-sz-t th, .ph-sz-t td {
+  padding: 3px 8px; text-align: center; border: 1px solid rgba(255,255,255,.12);
+  white-space: nowrap;
+}
+.ph-sz-lbl { text-align: left !important; color: rgba(255,255,255,.6); font-size: 10px; font-weight: 600; }
+.ph-sz-t td.r { color: #ff6b6b; font-weight: 700; }
+.ph-sz-t td.o { color: #ffd166; font-weight: 700; }
+.ph-sz-t td.g { color: #7fd6a4; }

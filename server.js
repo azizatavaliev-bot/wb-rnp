@@ -1,126 +1,209 @@
-// РНП v3 — Рука на пульсе · Wildberries
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
+// РНП v4 — Рука на пульсе · Wildberries + Auth
+const http   = require('http');
+const fs     = require('fs');
+const path   = require('path');
+const crypto = require('crypto');
 
-const PORT = process.env.PORT || 4810;
-const DB = path.join(__dirname, 'data', 'db.json');
-const PUB = path.join(__dirname, 'public');
+const PORT    = process.env.PORT || 4810;
+const PUB     = path.join(__dirname, 'public');
+const DATA    = path.join(__dirname, 'data');
+const USERS_F = path.join(DATA, 'users.json');
+const ARC_DIR = path.join(DATA, 'archive');
 
+// ---- Ensure dirs ----
+[DATA, ARC_DIR, path.join(DATA, 'u')].forEach(d => {
+  if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
+});
+
+// ---- Auth helpers ----
+const sessions = new Map(); // token → {userId, email, name, expires}
+
+function hashPass(pass, salt) {
+  return crypto.createHmac('sha256', salt).update(pass).digest('hex');
+}
+function genToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+function getSession(req) {
+  const cookie = req.headers.cookie || '';
+  const m = cookie.match(/rnp_session=([a-f0-9]{64})/);
+  if (!m) return null;
+  const s = sessions.get(m[1]);
+  if (!s || s.expires < Date.now()) { sessions.delete(m[1]); return null; }
+  return s;
+}
+function setCookie(res, token) {
+  res.setHeader('Set-Cookie', `rnp_session=${token}; HttpOnly; Path=/; Max-Age=2592000`);
+}
+function clearCookie(res) {
+  res.setHeader('Set-Cookie', 'rnp_session=; HttpOnly; Path=/; Max-Age=0');
+}
+
+// ---- Users DB ----
+function loadUsers() {
+  try { return JSON.parse(fs.readFileSync(USERS_F, 'utf8')); } catch { return []; }
+}
+function saveUsers(users) {
+  fs.writeFileSync(USERS_F, JSON.stringify(users, null, 2));
+}
+
+// ---- Per-user DB ----
 const DEFAULT_DB = {
   settings: { apiKey: '', taxRate: 7, usdRate: 90, ffStock: {} },
-  products: [],   // {id, sku, wbId, name, cost, pkg, commission, logistics, buyout, price, manager, status, planDrr}
-  plans: {},      // {"YYYY-MM": {sku: {ordRub, ordQty}}}
-  days: [],       // {id, date, sku, ordQ, ordS, buyQ, buyS, stock, shows, clicks, cart, adsShows, adsClicks, adsSpend, spp, giveaway, source}
-  campaigns: [],  // {id, sku, campId, dateFrom, dateTo, spend, shows, clicks, orders, buyQ, type, note}
+  products: [],
+  plans: {},
+  days: [],
+  campaigns: [],
   log: []
 };
-
-function loadDB() {
-  try { return Object.assign({}, DEFAULT_DB, JSON.parse(fs.readFileSync(DB, 'utf8'))); }
+function userDbPath(userId) {
+  const dir = path.join(DATA, 'u', String(userId));
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return path.join(dir, 'db.json');
+}
+function loadUserDB(userId) {
+  try { return Object.assign({}, DEFAULT_DB, JSON.parse(fs.readFileSync(userDbPath(userId), 'utf8'))); }
   catch { return JSON.parse(JSON.stringify(DEFAULT_DB)); }
 }
-function saveDB(db) {
-  try { fs.writeFileSync(DB, JSON.stringify(db, null, 2)); } catch {}
+function saveUserDB(userId, db) {
+  try { fs.writeFileSync(userDbPath(userId), JSON.stringify(db, null, 2)); } catch {}
 }
 
-// ---- Demo seed (Railway / first launch) ----
-function seedDemo(db) {
-  if (db.products.length) return;
+// ---- Demo seed ----
+function seedUserDemo(userId) {
+  const db = loadUserDB(userId);
+  if (db.products.length) return; // already seeded
 
-  // 6 товаров — разные ниши, статусы, экономика
   const prods = [
-    { id:'d1', sku:'Платье_цветочное', wbId:'1122334', name:'Платье цветочное миди', cost:890,  pkg:55,  commission:15, logistics:125, buyout:74, price:2790, manager:'Аня',   status:'Локомотив', planDrr:14 },
-    { id:'d2', sku:'Ветровка_черная',  wbId:'2233445', name:'Ветровка чёрная оверсайз', cost:1350, pkg:80,  commission:15, logistics:160, buyout:66, price:3590, manager:'Дима',  status:'Рост',      planDrr:19 },
-    { id:'d3', sku:'Джинсы_mom',       wbId:'3344556', name:'Джинсы mom fit светлые',   cost:1050, pkg:65,  commission:15, logistics:140, buyout:77, price:3190, manager:'Аня',   status:'Рост',      planDrr:17 },
-    { id:'d4', sku:'Топ_базовый',      wbId:'4455667', name:'Топ базовый рибана',       cost:280,  pkg:30,  commission:15, logistics:90,  buyout:82, price:890,  manager:'Света', status:'Локомотив', planDrr:12 },
-    { id:'d5', sku:'Юбка_плиссе',      wbId:'5566778', name:'Юбка плиссе миди',         cost:620,  pkg:45,  commission:15, logistics:110, buyout:58, price:1990, manager:'Света', status:'Аутсайдер', planDrr:22 },
-    { id:'d6', sku:'Кардиган_oversize', wbId:'6677889', name:'Кардиган оверсайз вязаный', cost:1100, pkg:70, commission:15, logistics:150, buyout:71, price:2990, manager:'Дима',  status:'Новинка',   planDrr:20 },
+    { id:'d01', sku:'Платье_миди_цветы',  name:'Платье миди в цветы',       category:'ПЛАТЬЯ',   cost:890,  pkg:55, commission:15, logistics:125, buyout:74, price:2790, manager:'Аня',   status:'Локомотив', planDrr:14, sizes:[{size:'XS',stock:45,inTransit:10},{size:'S',stock:120,inTransit:25},{size:'M',stock:89,inTransit:15},{size:'L',stock:34,inTransit:8},{size:'XL',stock:12,inTransit:3}] },
+    { id:'d02', sku:'Топ_рибана_белый',   name:'Топ рибана белый',          category:'ВЕРХ',     cost:180,  pkg:25, commission:15, logistics:80,  buyout:84, price:790,  manager:'Аня',   status:'Локомотив', planDrr:10, sizes:[{size:'XS',stock:40,inTransit:10},{size:'S',stock:95,inTransit:25},{size:'M',stock:130,inTransit:35},{size:'L',stock:55,inTransit:12}] },
+    { id:'d03', sku:'Джинсы_mom_светлые', name:'Джинсы mom fit светлые',    category:'НИЗ',      cost:1050, pkg:65, commission:15, logistics:140, buyout:77, price:3190, manager:'Дима',  status:'Рост',      planDrr:17, sizes:[{size:'XS',stock:30,inTransit:8},{size:'S',stock:85,inTransit:20},{size:'M',stock:110,inTransit:30},{size:'L',stock:65,inTransit:15},{size:'XL',stock:25,inTransit:6}] },
+    { id:'d04', sku:'Ветровка_черная',    name:'Ветровка чёрная оверсайз',  category:'ВЕТРОВКИ', cost:1350, pkg:80, commission:15, logistics:160, buyout:66, price:3590, manager:'Дима',  status:'Рост',      planDrr:19, sizes:[{size:'XS',stock:20,inTransit:5},{size:'S',stock:55,inTransit:10},{size:'M',stock:78,inTransit:20},{size:'L',stock:43,inTransit:12},{size:'XL',stock:18,inTransit:5},{size:'XXL',stock:8,inTransit:2}] },
+    { id:'d05', sku:'Юбка_плиссе_миди',  name:'Юбка плиссе миди бежевая',  category:'НИЗ',      cost:520,  pkg:45, commission:15, logistics:110, buyout:61, price:1790, manager:'Света', status:'Аутсайдер', planDrr:25, sizes:[{size:'XS',stock:40,inTransit:10},{size:'S',stock:95,inTransit:25},{size:'M',stock:130,inTransit:35},{size:'L',stock:55,inTransit:12}] },
+    { id:'d06', sku:'Кардиган_oversize',  name:'Кардиган оверсайз вязаный', category:'ВЕРХ',     cost:1100, pkg:70, commission:15, logistics:150, buyout:71, price:2990, manager:'Света', status:'Новинка',   planDrr:20, sizes:[{size:'XS',stock:20,inTransit:5},{size:'S',stock:55,inTransit:10},{size:'M',stock:78,inTransit:20},{size:'L',stock:43,inTransit:12},{size:'XL',stock:18,inTransit:5},{size:'XXL',stock:8,inTransit:2}] },
+    { id:'d07', sku:'Шорты_льняные',      name:'Шорты льняные бежевые',     category:'НИЗ',      cost:350,  pkg:35, commission:15, logistics:95,  buyout:79, price:1290, manager:'Аня',   status:'Рост',      planDrr:15, sizes:[{size:'XS',stock:40,inTransit:10},{size:'S',stock:95,inTransit:25},{size:'M',stock:130,inTransit:35},{size:'L',stock:55,inTransit:12}] },
+    { id:'d08', sku:'Блузка_шелк_белая', name:'Блузка под шёлк белая',      category:'ВЕРХ',     cost:680,  pkg:50, commission:15, logistics:120, buyout:69, price:2290, manager:'Дима',  status:'Рост',      planDrr:18, sizes:[{size:'XS',stock:40,inTransit:10},{size:'S',stock:95,inTransit:25},{size:'M',stock:130,inTransit:35},{size:'L',stock:55,inTransit:12}] },
+    { id:'d09', sku:'Брюки_палаццо',     name:'Брюки палаццо чёрные',       category:'НИЗ',      cost:780,  pkg:55, commission:15, logistics:130, buyout:72, price:2490, manager:'Света', status:'Новинка',   planDrr:22, sizes:[{size:'XS',stock:30,inTransit:8},{size:'S',stock:85,inTransit:20},{size:'M',stock:110,inTransit:30},{size:'L',stock:65,inTransit:15},{size:'XL',stock:25,inTransit:6}] },
+    { id:'d10', sku:'Сарафан_джинс',     name:'Сарафан джинсовый синий',    category:'ПЛАТЬЯ',   cost:920,  pkg:60, commission:15, logistics:135, buyout:75, price:2690, manager:'Аня',   status:'Рост',      planDrr:16, sizes:[{size:'XS',stock:45,inTransit:10},{size:'S',stock:120,inTransit:25},{size:'M',stock:89,inTransit:15},{size:'L',stock:34,inTransit:8},{size:'XL',stock:12,inTransit:3}] },
   ];
 
-  // Профили поведения по товарам: [showsBase, ctrPct, cartPct, ordPctOfClicks, buyoutPct, adsShareOfShows, adsCtrPct, sppBase, stockBase, adsSpendBase]
   const profiles = {
-    'Платье_цветочное': { shows:[18000,28000], ctr:[3.5,5.5], cart:[11,18], ord:[4.5,7],   buyout:[70,78], adsShare:.35, adsCtr:[.8,1.4], spp:[12,22], stock:[180,280], ads:[1800,3500], trend:1.08  },
-    'Ветровка_черная':  { shows:[12000,20000], ctr:[2.8,4.5], cart:[8,14],  ord:[3.2,5.5], buyout:[62,70], adsShare:.42, adsCtr:[.6,1.1], spp:[15,25], stock:[90,160],  ads:[2200,4000], trend:1.05  },
-    'Джинсы_mom':       { shows:[14000,22000], ctr:[3.0,4.8], cart:[9,15],  ord:[3.8,6],   buyout:[73,81], adsShare:.38, adsCtr:[.7,1.2], spp:[10,20], stock:[120,200], ads:[1600,3000], trend:1.06  },
-    'Топ_базовый':      { shows:[22000,38000], ctr:[4.0,6.5], cart:[13,22], ord:[5.5,9],   buyout:[78,86], adsShare:.28, adsCtr:[.9,1.6], spp:[8,18],  stock:[350,600], ads:[900,2000],  trend:1.10  },
-    'Юбка_плиссе':      { shows:[8000,14000],  ctr:[1.8,3.2], cart:[5,10],  ord:[2.0,3.5], buyout:[52,65], adsShare:.50, adsCtr:[.4,.9],  spp:[18,28], stock:[40,90],   ads:[1200,2800], trend:0.96  },
-    'Кардиган_oversize':{ shows:[9000,16000],  ctr:[2.2,3.8], cart:[7,13],  ord:[2.8,4.5], buyout:[67,75], adsShare:.45, adsCtr:[.5,1.0], spp:[12,20], stock:[70,130],  ads:[1400,3200], trend:1.03  },
+    'Платье_миди_цветы':  { showsBase:[15000,28000], ctr:[3.2,5.8], cart:[10,18], ordRate:[4,7],   trendMo:1.12, wknd:.82, saleBoost:1.5 },
+    'Топ_рибана_белый':   { showsBase:[25000,45000], ctr:[4.5,7.0], cart:[14,24], ordRate:[6,10],  trendMo:1.15, wknd:1.10, saleBoost:1.8 },
+    'Джинсы_mom_светлые': { showsBase:[12000,22000], ctr:[2.8,4.8], cart:[8,15],  ordRate:[3.5,6], trendMo:1.08, wknd:.78, saleBoost:1.4 },
+    'Ветровка_черная':    { showsBase:[10000,18000], ctr:[2.5,4.2], cart:[7,13],  ordRate:[3,5.5], trendMo:0.95, wknd:.75, saleBoost:1.3 },
+    'Юбка_плиссе_миди':   { showsBase:[6000,11000],  ctr:[1.5,2.8], cart:[4,9],   ordRate:[1.8,3.2],trendMo:0.90, wknd:.70, saleBoost:1.2 },
+    'Кардиган_oversize':  { showsBase:[5000,12000],  ctr:[1.8,3.5], cart:[5,11],  ordRate:[2,4],   trendMo:1.05, wknd:.80, saleBoost:1.1 },
+    'Шорты_льняные':      { showsBase:[14000,26000], ctr:[3.5,6.0], cart:[11,20], ordRate:[5,8],   trendMo:1.20, wknd:1.15, saleBoost:1.6 },
+    'Блузка_шелк_белая':  { showsBase:[9000,17000],  ctr:[2.8,4.5], cart:[8,15],  ordRate:[3.2,5.5],trendMo:1.10, wknd:.82, saleBoost:1.4 },
+    'Брюки_палаццо':      { showsBase:[7000,14000],  ctr:[2.2,4.0], cart:[6,12],  ordRate:[2.5,4.5],trendMo:1.08, wknd:.80, saleBoost:1.3 },
+    'Сарафан_джинс':      { showsBase:[11000,21000], ctr:[3.0,5.2], cart:[9,17],  ordRate:[4,7],   trendMo:1.18, wknd:1.05, saleBoost:1.5 },
   };
 
   const rng  = (a,b) => Math.random()*(b-a)+a;
   const irng = (a,b) => Math.floor(rng(a,b));
-  const ym   = new Date().toISOString().slice(0,7);
-  const [y,m]= ym.split('-').map(Number);
-  const daysInMonth = new Date(y,m,0).getDate();
-  const todayD = new Date().getDate();
-  const DOW = [0,1,2,3,4,5,6]; // 0=Sun
+
+  const months = [
+    { ym:'2026-04', days:30 },
+    { ym:'2026-05', days:31 },
+    { ym:'2026-06', days:30 },
+  ];
 
   const days = [];
-  for (let d = 1; d <= Math.min(todayD, daysInMonth); d++) {
-    const date = `${ym}-${String(d).padStart(2,'0')}`;
-    const dow  = new Date(y,m-1,d).getDay(); // 0=Вс,6=Сб
-    const isWknd = dow === 0 || dow === 6;
-    const progress = d / daysInMonth; // 0..1 — рост к концу месяца
+  const plans = {};
+
+  for (const mo of months) {
+    const [y, m] = mo.ym.split('-').map(Number);
+    plans[mo.ym] = {};
 
     for (const p of prods) {
-      const pr = profiles[p.sku];
-      if (!pr) continue;
+      plans[mo.ym][p.sku] = {
+        ordQty: Math.round(rng(200, 900)),
+        ordRub: Math.round(rng(200, 900) * p.price * 0.9),
+        buyQty: Math.round(rng(150, 700))
+      };
+    }
 
-      // Тренд + выходные (-20% в выходные для рабочей одежды, +15% для базовых)
-      const trendMult = Math.pow(pr.trend, progress * 30);
-      const wkndMult  = isWknd ? (p.sku === 'Топ_базовый' ? 1.15 : 0.80) : 1.0;
-      const noise     = 0.88 + Math.random() * 0.24;
+    for (let d = 1; d <= mo.days; d++) {
+      const date = `${mo.ym}-${String(d).padStart(2,'0')}`;
+      const dow  = new Date(y, m-1, d).getDay();
+      const isWknd = dow === 0 || dow === 6;
+      const isMayHols = mo.ym === '2026-05' && d >= 1 && d <= 9;
+      const isSale    = mo.ym === '2026-05' && d >= 11 && d <= 18;
+      const moIdx = months.findIndex(x => x.ym === mo.ym); // 0,1,2
+      const progress = d / mo.days;
 
-      const shows     = Math.round(irng(...pr.shows) * trendMult * wkndMult * noise);
-      const clicks    = Math.round(shows * rng(...pr.ctr) / 100);
-      const cart      = Math.round(clicks * rng(...pr.cart) / 100);
-      const ordQ      = Math.round(clicks * rng(...pr.ord) / 100);
-      const buyoutPct = rng(...pr.buyout) / 100;
-      const buyQ      = Math.max(0, Math.round(ordQ * buyoutPct * (0.92 + Math.random()*.16)));
-      const spp       = Math.round(rng(...pr.spp) * 10) / 10;
-      const effectivePrice = p.price * (1 - spp/100);
-      const ordS      = Math.round(ordQ * effectivePrice);
-      const buyS      = Math.round(buyQ * effectivePrice * 0.97);
-      const adsShows  = Math.round(shows * pr.adsShare * (0.9 + Math.random()*.2));
-      const adsClicks = Math.round(adsShows * rng(...pr.adsCtr) / 100);
-      const adsSpend  = irng(...pr.ads) * (isWknd ? 0.7 : 1.0);
-      const stock     = Math.max(5, irng(...pr.stock) - Math.round(d * buyQ * 0.1));
-      const giveaway  = d <= 5 && Math.random() > 0.6 ? irng(1,3) : 0;
+      for (const p of prods) {
+        const pr = profiles[p.sku];
+        if (!pr) continue;
 
-      days.push({ id:`demo_${p.sku}_${date}`, date, sku:p.sku,
-        ordQ, ordS, buyQ, buyS, stock, shows, clicks, cart,
-        adsShows, adsClicks, adsSpend, spp, giveaway, source:'demo' });
+        const trendMult = Math.pow(pr.trendMo, progress + moIdx * 0.5);
+        const wkndMult  = isWknd ? pr.wknd : 1.0;
+        const holsMult  = isMayHols ? 1.35 : 1.0;
+        const saleMult  = isSale ? pr.saleBoost : 1.0;
+        const noise     = 0.88 + Math.random() * 0.24;
+
+        const shows    = Math.round(irng(...pr.showsBase) * trendMult * wkndMult * holsMult * noise);
+        const clicks   = Math.round(shows * rng(...pr.ctr) / 100);
+        const cart     = Math.round(clicks * rng(...pr.cart) / 100);
+        const ordQ     = Math.round(clicks * rng(...pr.ordRate) / 100 * saleMult);
+        const buyoutPct = p.buyout / 100 * (0.92 + Math.random() * .16);
+        const buyQ     = Math.max(0, Math.round(ordQ * buyoutPct));
+        const spp      = isSale ? Math.round(rng(25,35)*10)/10 : Math.round(rng(8,22)*10)/10;
+        const effectivePrice = p.price * (1 - spp/100);
+        const ordS     = Math.round(ordQ * effectivePrice);
+        const buyS     = Math.round(buyQ * effectivePrice * 0.97);
+        const adsShare = p.status === 'Аутсайдер' ? 0.55 : p.status === 'Новинка' ? 0.50 : 0.35;
+        const adsShows = Math.round(shows * adsShare * (0.9 + Math.random() * .2));
+        const adsCtr   = p.status === 'Аутсайдер' ? rng(0.3, 0.8) : rng(0.7, 1.5);
+        const adsClicks= Math.round(adsShows * adsCtr / 100);
+        const adsBase  = p.status === 'Аутсайдер' ? rng(2000,5000) : rng(800, 3500);
+        const adsSpend = Math.round(adsBase * (isWknd ? 0.7 : 1.0) * saleMult);
+        const stock    = Math.max(5, irng(80,300) - Math.round(d * buyQ * 0.05));
+        const isNewbie = p.status === 'Новинка';
+        const giveaway = mo.ym === '2026-04' && d <= 5 && isNewbie ? irng(1,5) : 0;
+
+        days.push({
+          id: `demo_${p.sku}_${date}`,
+          date, sku: p.sku,
+          ordQ, ordS, buyQ, buyS, stock, shows, clicks, cart,
+          adsShows, adsClicks, adsSpend, spp, giveaway,
+          source: 'demo'
+        });
+      }
     }
   }
 
-  const planKey = ym;
   db.products = prods;
   db.days     = days;
-  db.plans    = { [planKey]: {
-    'Платье_цветочное':  { ordQty:700,  ordRub:1953000, buyQty:518 },
-    'Ветровка_черная':   { ordQty:420,  ordRub:1507800, buyQty:277 },
-    'Джинсы_mom':        { ordQty:480,  ordRub:1531200, buyQty:370 },
-    'Топ_базовый':       { ordQty:1200, ordRub:1068000, buyQty:984 },
-    'Юбка_плиссе':       { ordQty:280,  ordRub:557200,  buyQty:162 },
-    'Кардиган_oversize': { ordQty:320,  ordRub:956800,  buyQty:227 },
-  }};
+  db.plans    = plans;
   db.settings = { apiKey:'', taxRate:7, usdRate:90 };
-  addLog(db, '🎉 Демо-кабинет загружен: 6 товаров, полный месяц данных. Замени на свои!');
-  saveDB(db);
+  addLog(db, '🎉 Демо-кабинет загружен: 10 товаров, 3 месяца данных (апрель–июнь 2026). Замени на свои!');
+  saveUserDB(userId, db);
 }
+
 function addLog(db, msg) {
   db.log.unshift({ t: new Date().toISOString(), msg });
   db.log = db.log.slice(0, 200);
 }
 
-function send(res, code, data, type) {
-  res.writeHead(code, { 'Content-Type': type || 'application/json; charset=utf-8' });
-  if (Buffer.isBuffer(data) || typeof data === 'string') res.end(data);
-  else res.end(JSON.stringify(data));
-}
-function body(req) {
-  return new Promise(r => { let b = ''; req.on('data', c => b += c); req.on('end', () => { try { r(JSON.parse(b || '{}')); } catch { r({}); } }); });
+// ---- Init demo user ----
+function ensureDemoUser() {
+  const users = loadUsers();
+  if (users.find(u => u.email === 'demo@rnp.ru')) return;
+  const salt = crypto.randomBytes(16).toString('hex');
+  const user = {
+    id: 'demo',
+    email: 'demo@rnp.ru',
+    name: 'Демо-магазин',
+    passHash: hashPass('demo123', salt),
+    salt,
+    createdAt: new Date().toISOString()
+  };
+  users.push(user);
+  saveUsers(users);
+  seedUserDemo('demo');
+  console.log('✅ Демо-пользователь создан: demo@rnp.ru / demo123');
 }
 
 // ---- WB Statistics API ----
@@ -145,7 +228,7 @@ async function wbSync(db, key, dateFrom) {
   const dateOf = d => (d || '').slice(0, 10);
   function bucket(date, sku) {
     const k = date + '|' + sku;
-    if (!map[k]) map[k] = { date, sku, ordQ: 0, ordS: 0, buyQ: 0, buyS: 0, stock: 0, shows: 0, clicks: 0, cart: 0, adsShows: 0, adsClicks: 0, adsSpend: 0, spp: 0, giveaway: 0 };
+    if (!map[k]) map[k] = { date, sku, ordQ:0, ordS:0, buyQ:0, buyS:0, stock:0, shows:0, clicks:0, cart:0, adsShows:0, adsClicks:0, adsSpend:0, spp:0, giveaway:0 };
     return map[k];
   }
   orders.forEach(o => { const b = bucket(dateOf(o.date), skuOf(o)); b.ordQ += 1; b.ordS += (o.priceWithDisc || o.totalPrice || 0); });
@@ -160,85 +243,190 @@ async function wbSync(db, key, dateFrom) {
   Object.keys(stockBySku).concat(orders.map(skuOf)).forEach(sku => {
     if (!known.has(sku)) {
       known.add(sku);
-      db.products.push({ id: 'p' + Date.now() + Math.random().toString(36).slice(2, 6), sku, wbId: '', name: sku, cost: 0, pkg: 0, commission: 15, logistics: 0, buyout: 70, price: 0, manager: '', status: 'НЕ ВЫБРАНО', planDrr: 0 });
+      db.products.push({ id:'p'+Date.now()+Math.random().toString(36).slice(2,6), sku, wbId:'', name:sku, cost:0, pkg:0, commission:15, logistics:0, buyout:70, price:0, manager:'', status:'НЕ ВЫБРАНО', planDrr:0 });
     }
   });
 
   db.days = db.days.filter(d => d.source !== 'wb' || d.date < dateFrom);
-  Object.values(map).forEach(b => {
-    db.days.push({ id: 'wb' + b.date + b.sku, ...b, source: 'wb' });
-  });
+  Object.values(map).forEach(b => { db.days.push({ id:'wb'+b.date+b.sku, ...b, source:'wb' }); });
   out.days = Object.keys(map).length;
   addLog(db, `Синк WB: заказы ${out.orders}, выкупы ${out.sales}, остатки ${out.stocks}, дней·SKU ${out.days}`);
   return out;
 }
 
-const ARC_DIR = path.join(__dirname, 'data', 'archive');
-if (!fs.existsSync(ARC_DIR)) fs.mkdirSync(ARC_DIR, { recursive: true });
+// ---- HTTP helpers ----
+const MIME = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8' };
 
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+function send(res, code, data, type) {
+  res.writeHead(code, { 'Content-Type': type || 'application/json; charset=utf-8' });
+  if (Buffer.isBuffer(data) || typeof data === 'string') res.end(data);
+  else res.end(JSON.stringify(data));
+}
+function body(req) {
+  return new Promise(r => { let b=''; req.on('data', c => b+=c); req.on('end', () => { try { r(JSON.parse(b||'{}')); } catch { r({}); } }); });
+}
+function redirect(res, url) {
+  res.writeHead(302, { Location: url });
+  res.end();
+}
 
+// ---- Server ----
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
   const p = u.pathname;
 
+  // ---- Auth endpoints (no session required) ----
+  if (p === '/api/auth/register' && req.method === 'POST') {
+    const b = await body(req);
+    const { email, name, password } = b;
+    if (!email || !name || !password) return send(res, 200, { ok:false, msg:'Заполни все поля' });
+    const users = loadUsers();
+    if (users.find(u => u.email === email)) return send(res, 200, { ok:false, msg:'Email уже занят' });
+    const salt = crypto.randomBytes(16).toString('hex');
+    const user = { id: genToken().slice(0,12), email, name, passHash: hashPass(password, salt), salt, createdAt: new Date().toISOString() };
+    users.push(user);
+    saveUsers(users);
+    seedUserDemo(user.id);
+    const token = genToken();
+    sessions.set(token, { userId: user.id, email: user.email, name: user.name, expires: Date.now() + 30*24*3600*1000 });
+    setCookie(res, token);
+    return send(res, 200, { ok:true, token, user: { id:user.id, email:user.email, name:user.name } });
+  }
+
+  if (p === '/api/auth/login' && req.method === 'POST') {
+    const b = await body(req);
+    const { email, password } = b;
+    const users = loadUsers();
+    const user = users.find(u => u.email === email);
+    if (!user || hashPass(password, user.salt) !== user.passHash) return send(res, 200, { ok:false, msg:'Неверный email или пароль' });
+    const token = genToken();
+    sessions.set(token, { userId: user.id, email: user.email, name: user.name, expires: Date.now() + 30*24*3600*1000 });
+    setCookie(res, token);
+    return send(res, 200, { ok:true, token, user: { id:user.id, email:user.email, name:user.name } });
+  }
+
+  if (p === '/api/auth/logout' && req.method === 'POST') {
+    const cookie = req.headers.cookie || '';
+    const m = cookie.match(/rnp_session=([a-f0-9]{64})/);
+    if (m) sessions.delete(m[1]);
+    clearCookie(res);
+    return send(res, 200, { ok:true });
+  }
+
+  if (p === '/api/auth/me') {
+    const sess = getSession(req);
+    if (!sess) return send(res, 401, { error: 'unauthorized' });
+    return send(res, 200, { user: { id:sess.userId, email:sess.email, name:sess.name } });
+  }
+
+  // ---- Demo auto-login ----
+  if (p === '/demo') {
+    const users = loadUsers();
+    const user = users.find(u => u.email === 'demo@rnp.ru');
+    if (user) {
+      const token = genToken();
+      sessions.set(token, { userId: user.id, email: user.email, name: user.name, expires: Date.now() + 30*24*3600*1000 });
+      setCookie(res, token);
+    }
+    return redirect(res, '/');
+  }
+
+  // ---- Static files (login.html always available) ----
+  if (p === '/login.html') {
+    const fp = path.join(PUB, 'login.html');
+    return fs.readFile(fp, (err, data) => {
+      if (err) return send(res, 404, 'Not found', 'text/plain');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(data);
+    });
+  }
+
+  // ---- Root: redirect to login if no session ----
+  if (p === '/') {
+    const sess = getSession(req);
+    if (!sess) return redirect(res, '/login.html');
+    const fp = path.join(PUB, 'index.html');
+    return fs.readFile(fp, (err, data) => {
+      if (err) return send(res, 404, 'Not found', 'text/plain');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(data);
+    });
+  }
+
+  // ---- Protected API endpoints ----
   if (p.startsWith('/api/')) {
-    const db = loadDB();
+    const sess = getSession(req);
+    if (!sess) return send(res, 401, { error: 'unauthorized' });
+    const userId = sess.userId;
+    const db = loadUserDB(userId);
+
     try {
       if (p === '/api/state' && req.method === 'GET') return send(res, 200, db);
+
       if (p === '/api/save' && req.method === 'POST') {
         const b = await body(req);
-        ['settings', 'products', 'plans', 'days', 'campaigns'].forEach(k => { if (b[k] !== undefined) db[k] = b[k]; });
-        saveDB(db); return send(res, 200, { ok: true });
+        ['settings','products','plans','days','campaigns'].forEach(k => { if (b[k] !== undefined) db[k] = b[k]; });
+        saveUserDB(userId, db);
+        return send(res, 200, { ok:true });
       }
+
       if (p === '/api/wb/test' && req.method === 'POST') {
         const b = await body(req);
         const key = b.apiKey || db.settings.apiKey;
         try {
           const today = new Date().toISOString().slice(0, 10);
           const o = await wbGet(key, `/api/v1/supplier/orders?dateFrom=${today}&flag=1`);
-          return send(res, 200, { ok: true, msg: `Подключение успешно. Заказов за сегодня: ${o.length}` });
-        } catch (e) { return send(res, 200, { ok: false, msg: 'Ошибка: ' + e.message }); }
+          return send(res, 200, { ok:true, msg:`Подключение успешно. Заказов за сегодня: ${o.length}` });
+        } catch(e) { return send(res, 200, { ok:false, msg:'Ошибка: '+e.message }); }
       }
+
       if (p === '/api/wb/sync' && req.method === 'POST') {
         const b = await body(req);
         const key = b.apiKey || db.settings.apiKey;
-        if (!key) return send(res, 200, { ok: false, msg: 'Нет API-ключа' });
+        if (!key) return send(res, 200, { ok:false, msg:'Нет API-ключа' });
         if (b.apiKey) db.settings.apiKey = b.apiKey;
-        const dateFrom = b.dateFrom || new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+        const dateFrom = b.dateFrom || new Date(Date.now() - 30*864e5).toISOString().slice(0, 10);
         try {
           const r = await wbSync(db, key, dateFrom);
-          saveDB(db);
-          return send(res, 200, { ok: true, msg: `Готово. Заказы ${r.orders}, выкупы ${r.sales}, остатки ${r.stocks}`, result: r });
-        } catch (e) { addLog(db, 'Ошибка синка: ' + e.message); saveDB(db); return send(res, 200, { ok: false, msg: e.message }); }
+          saveUserDB(userId, db);
+          return send(res, 200, { ok:true, msg:`Готово. Заказы ${r.orders}, выкупы ${r.sales}, остатки ${r.stocks}`, result:r });
+        } catch(e) {
+          addLog(db, 'Ошибка синка: '+e.message);
+          saveUserDB(userId, db);
+          return send(res, 200, { ok:false, msg:e.message });
+        }
       }
+
       if (p === '/api/archive/save' && req.method === 'POST') {
         const b = await body(req);
-        if (!b.ym) return send(res, 200, { ok: false, msg: 'Нет ym' });
-        const file = path.join(ARC_DIR, b.ym + '.json');
+        if (!b.ym) return send(res, 200, { ok:false, msg:'Нет ym' });
+        const file = path.join(ARC_DIR, b.ym+'.json');
         fs.writeFileSync(file, JSON.stringify(b, null, 2));
-        return send(res, 200, { ok: true, file });
+        return send(res, 200, { ok:true, file });
       }
+
       if (p === '/api/archive/list' && req.method === 'GET') {
         const files = fs.readdirSync(ARC_DIR).filter(f => f.endsWith('.json')).sort().reverse();
         const list = files.map(f => {
-          try { const d = JSON.parse(fs.readFileSync(path.join(ARC_DIR, f), 'utf8')); return { ym: d.ym, name: d.name, savedAt: d.savedAt, days: d.days?.length }; }
-          catch { return { ym: f.replace('.json','') }; }
+          try { const d = JSON.parse(fs.readFileSync(path.join(ARC_DIR, f), 'utf8')); return { ym:d.ym, name:d.name, savedAt:d.savedAt, days:d.days?.length }; }
+          catch { return { ym:f.replace('.json','') }; }
         });
         return send(res, 200, list);
       }
+
       if (p.startsWith('/api/archive/view') && req.method === 'GET') {
         const ym = u.searchParams.get('ym');
-        const file = path.join(ARC_DIR, (ym||'') + '.json');
-        if (!ym || !fs.existsSync(file)) return send(res, 404, { error: 'not found' });
+        const file = path.join(ARC_DIR, (ym||'')+'.json');
+        if (!ym || !fs.existsSync(file)) return send(res, 404, { error:'not found' });
         return send(res, 200, JSON.parse(fs.readFileSync(file, 'utf8')));
       }
-      return send(res, 404, { error: 'not found' });
-    } catch (e) { return send(res, 500, { error: e.message }); }
+
+      return send(res, 404, { error:'not found' });
+    } catch(e) { return send(res, 500, { error:e.message }); }
   }
 
-  let file = p === '/' ? '/index.html' : p;
-  const fp = path.join(PUB, path.normalize(file).replace(/^(\.\.[/\\])+/, ''));
+  // ---- Other static files ----
+  const fp = path.join(PUB, path.normalize(p).replace(/^(\.\.[/\\])+/, ''));
   fs.readFile(fp, (err, data) => {
     if (err) return send(res, 404, 'Not found', 'text/plain');
     res.writeHead(200, {
@@ -250,8 +438,5 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-// Seed demo data on first launch
-const _startDb = loadDB();
-seedDemo(_startDb);
-
+ensureDemoUser();
 server.listen(PORT, '0.0.0.0', () => console.log(`РНП запущена → http://localhost:${PORT}`));

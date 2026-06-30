@@ -17,14 +17,27 @@
   <div class="top-right">
     <div class="month-nav">
       <button class="mnav-btn" onclick="App.shiftMonth(-1)" title="Предыдущий месяц">‹</button>
-      <input type="month" id="month" onchange="App.render()" style="width:150px">
+      <button class="month-btn" id="monthBtn" onclick="App.toggleMonthPicker(event)" title="Выбрать месяц">
+        <span id="monthLabel">июнь 2026 г.</span>
+      </button>
+      <input type="hidden" id="month">
       <button class="mnav-btn" onclick="App.shiftMonth(1)" title="Следующий месяц">›</button>
+    </div>
+    <div class="month-picker" id="monthPicker" style="display:none">
+      <div class="mp-year">
+        <button onclick="App.mpShiftYear(-1)">‹</button>
+        <span id="mpYear">2026</span>
+        <button onclick="App.mpShiftYear(1)">›</button>
+      </div>
+      <div class="mp-grid" id="mpGrid"></div>
     </div>
     <button class="btn sm" onclick="App.openDay()">＋ День</button>
     <button class="btn sm ghost" onclick="App.downloadTemplate()" title="Скачать CSV-шаблон">📋</button>
     <button class="btn sm ghost" onclick="App.importCsv()" title="Импортировать CSV">📥</button>
     <button class="btn sm ghost" onclick="App.archiveMonth()" title="Сохранить архив текущего месяца">💾 Архив</button>
     <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="App.handleCsvFile(this)">
+    <span id="userInfo" style="font-size:11px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+    <button class="btn sm ghost" onclick="App.logout()" title="Выйти">⎋ Выйти</button>
     <button class="themebtn" id="themeBtn" onclick="App.theme()">🌙</button>
   </div>
 </div>
@@ -114,37 +127,84 @@
 
 <!-- ===== НАСТРОЙКИ ===== -->
 <div class="page" id="p-settings">
-  <div class="card" style="max-width:600px">
-    <div class="hd">🔌 Wildberries API</div>
-    <div style="padding:18px;display:flex;flex-direction:column;gap:14px">
-      <div class="fld"><label>API-ключ WB <span class="tip" data-tip="Получи в кабинете WB: иконка профиля → Настройки → Доступ к API → создай токен с правами «Статистика». Токен начинается с eyJ...">?</span></label><input type="password" id="apiKey" placeholder="eyJ..."></div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <label style="font-size:12px;color:var(--muted)">Грузить с:</label>
-        <input type="date" id="dateFrom" style="padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg2);color:var(--ink);font-family:inherit">
-        <button class="btn sm ghost" onclick="App.wbTest()">🔍 Тест связи</button>
-        <button class="btn sm" onclick="App.wbSync()">⬇ Загрузить данные</button>
+  <div class="settings-wrap">
+
+    <!-- Левая колонка -->
+    <div class="settings-col">
+
+      <!-- API -->
+      <div class="s-card">
+        <div class="s-card-hd">
+          <span class="s-card-icon">🔌</span>
+          <div>
+            <div class="s-card-title">Wildberries API</div>
+            <div class="s-card-sub">Автозагрузка данных из кабинета WB</div>
+          </div>
+        </div>
+        <div class="s-card-body">
+          <div class="fld"><label>API-ключ WB <span class="tip" data-tip="Получи в кабинете WB: профиль → Настройки → Доступ к API → токен «Статистика»">?</span></label>
+            <input type="password" id="apiKey" placeholder="eyJ..."></div>
+          <div class="fld"><label>Грузить с даты</label>
+            <input type="date" id="dateFrom"></div>
+          <div id="wbMsg" style="font-size:12px;min-height:18px"></div>
+          <div class="s-actions">
+            <button class="btn sm ghost" onclick="App.wbTest()">🔍 Тест связи</button>
+            <button class="btn sm" onclick="App.wbSync()">⬇ Загрузить данные</button>
+          </div>
+        </div>
       </div>
-      <div id="wbMsg" style="font-size:13px"></div>
+
+      <!-- Общие -->
+      <div class="s-card">
+        <div class="s-card-hd">
+          <span class="s-card-icon">⚙️</span>
+          <div>
+            <div class="s-card-title">Общие параметры</div>
+            <div class="s-card-sub">Налог и курс валюты для расчётов</div>
+          </div>
+        </div>
+        <div class="s-card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="fld"><label>Налог % <span class="tip" data-tip="УСН 6% / 15%, ОСНО 20%">?</span></label>
+              <input type="number" id="taxRate" min="0" max="50" step="0.1"></div>
+            <div class="fld"><label>Курс USD ₽ <span class="tip" data-tip="Используется для отображения К перечислению в $">?</span></label>
+              <input type="number" id="usdRate" min="1" step="0.01"></div>
+          </div>
+          <div class="s-actions">
+            <button class="btn" onclick="App.saveSettings()">💾 Сохранить</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Лог -->
+      <div class="s-card">
+        <div class="s-card-hd">
+          <span class="s-card-icon">📜</span>
+          <div><div class="s-card-title">Лог действий</div></div>
+        </div>
+        <div id="logBox" style="padding:12px 16px;font-size:11px;color:var(--muted);max-height:180px;overflow:auto;font-family:monospace"></div>
+      </div>
+
     </div>
-  </div>
-  <div class="card" style="max-width:600px">
-    <div class="hd">⚙️ Общие</div>
-    <div style="padding:18px;display:flex;gap:14px;flex-wrap:wrap">
-      <div class="fld"><label>Налог % <span class="tip" data-tip="УСН 6% → вводи 6. УСН доходы-расходы 15% → вводи 15. ОСНО → вводи 20. Налог считается от суммы «К перечислению»">?</span></label><input type="number" id="taxRate" style="width:100px"></div>
-      <div class="fld"><label>Курс USD ₽ <span class="tip" data-tip="Актуальный курс доллара. Используется для отображения «К перечислению» в долларах в шапке каждого товара. Обновляй раз в неделю">?</span></label><input type="number" id="usdRate" style="width:100px"></div>
+
+    <!-- Правая колонка -->
+    <div class="settings-col">
+
+      <!-- Видимость строк -->
+      <div class="s-card">
+        <div class="s-card-hd">
+          <span class="s-card-icon">👁</span>
+          <div>
+            <div class="s-card-title">Видимость строк</div>
+            <div class="s-card-sub">Скрыть ненужные секции и строки таблицы</div>
+          </div>
+        </div>
+        <div class="s-card-body">
+          <div id="visRows" style="display:flex;flex-direction:column;gap:8px"></div>
+        </div>
+      </div>
+
     </div>
-    <div style="padding:0 18px 18px"><button class="btn" onclick="App.saveSettings()">💾 Сохранить</button></div>
-  </div>
-  <div class="card" style="max-width:600px">
-    <div class="hd">👁 Видимость строк таблицы</div>
-    <div style="padding:14px 18px">
-      <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Снимите галочку чтобы скрыть секцию или строку из таблицы РНП</p>
-      <div id="visRows" style="display:flex;flex-direction:column;gap:7px"></div>
-    </div>
-  </div>
-  <div class="card" style="max-width:600px">
-    <div class="hd">📜 Лог</div>
-    <div id="logBox" style="padding:14px 18px;font-size:12px;color:var(--muted);max-height:200px;overflow:auto"></div>
   </div>
 </div>
 
@@ -479,9 +539,10 @@
     <div class="grid3" style="padding:14px">
       <div class="fld"><label>Заказы, шт</label><input type="number" id="dayOrdQ" min="0" placeholder="0"></div>
       <div class="fld"><label>Заказы, ₽</label><input type="number" id="dayOrdS" min="0" placeholder="0"></div>
-      <div class="fld"></div>
-      <div class="fld"><label>Выкупы, шт</label><input type="number" id="dayBuyQ" min="0" placeholder="0"></div>
-      <div class="fld"><label>Выкупы, ₽</label><input type="number" id="dayBuyS" min="0" placeholder="0"></div>
+      <div class="fld"><label>СПП %</label><input type="number" id="daySpp" min="0" max="100" step="0.1" placeholder="0"></div>
+      <div class="fld"><label>Продажи (выкупы), шт</label><input type="number" id="dayBuyQ" min="0" placeholder="0"></div>
+      <div class="fld"><label>Продажи (выкупы), ₽</label><input type="number" id="dayBuyS" min="0" placeholder="0"></div>
+      <div class="fld"><label>Раздачи, шт</label><input type="number" id="dayGiveaway" min="0" placeholder="0"></div>
     </div>
   </div>
 
@@ -491,7 +552,7 @@
       <div class="fld"><label>Показы</label><input type="number" id="dayShows" min="0" placeholder="0"></div>
       <div class="fld"><label>Клики</label><input type="number" id="dayClicks" min="0" placeholder="0"></div>
       <div class="fld"><label>Корзина, шт</label><input type="number" id="dayCart" min="0" placeholder="0"></div>
-      <div class="fld"><label>Остаток, шт</label><input type="number" id="dayStock" min="0" placeholder="текущий остаток на WB"></div>
+      <div class="fld"><label>Остаток на WB, шт</label><input type="number" id="dayStock" min="0" placeholder="0"></div>
     </div>
   </div>
 
@@ -501,14 +562,6 @@
       <div class="fld"><label>Показы РК</label><input type="number" id="dayAdsShows" min="0" placeholder="0"></div>
       <div class="fld"><label>Клики РК</label><input type="number" id="dayAdsClicks" min="0" placeholder="0"></div>
       <div class="fld"><label>Расход РК, ₽</label><input type="number" id="dayAdsSpend" min="0" placeholder="0"></div>
-    </div>
-  </div>
-
-  <!-- Прочее -->
-  <div class="msec"><div class="msec-t">💡 Прочее</div>
-    <div class="grid3" style="padding:14px">
-      <div class="fld"><label>СПП %</label><input type="number" id="daySpp" min="0" max="100" step="0.1" placeholder="скидка постоянного покупателя"></div>
-      <div class="fld"><label>Раздачи, шт</label><input type="number" id="dayGiveaway" min="0" placeholder="0"></div>
     </div>
   </div>
 
@@ -539,6 +592,7 @@
         </select>
       </div>
       <div class="fld"><label>Ответственный</label><input id="apManager" placeholder="Имя менеджера"></div>
+      <div class="fld"><label>Категория</label><input id="apCategory" placeholder="напр. ПЛАТЬЯ, ВЕРХ, НИЗ, ВЕТРОВКИ"></div>
     </div>
   </div>
 
@@ -554,6 +608,15 @@
     </div>
   </div>
 
+  <div class="msec"><div class="msec-t">📦 Остатки по размерам (необязательно)</div>
+    <div style="padding:10px 14px">
+      <small style="color:var(--muted);display:block;margin-bottom:8px">Формат: S:150, M:89, L:34 (через запятую)</small>
+      <div class="fld"><label>На складах (размер:кол-во)</label>
+        <input id="apSizesStock" placeholder="XS:45, S:120, M:89, L:34, XL:12"></div>
+      <div class="fld"><label>В пути (размер:кол-во)</label>
+        <input id="apSizesTransit" placeholder="XS:10, S:25, M:15"></div>
+    </div>
+  </div>
   <div class="sheet-act">
     <button class="btn ghost" onclick="App.close('mAddProd')">Отмена</button>
     <button class="btn" onclick="App.saveNewProduct()">💾 Сохранить</button>
@@ -561,10 +624,11 @@
 </div></div>
 
 <!-- ТАБЫ ВНИЗУ как в Google Sheets -->
-<div class="sheet-tabs">
-  <button class="sheet-tab active" data-p="rnp">📊 РНП</button>
-  <button class="sheet-tab" data-p="products">🏷 Товары и план</button>
-  <button class="sheet-tab" data-p="settings">⚙️ Настройки</button>
+<div class="sheet-tabs" id="sheetTabs">
+  <button class="sheet-tab active" data-p="rnp">📊 Сводная</button>
+  <button class="sheet-tab" data-p="products">📦 Товары и план</button>
+  <!-- категории добавляются из JS -->
+  <button class="sheet-tab" data-p="settings" style="margin-left:auto">⚙️ Настройки</button>
   <button class="sheet-tab" data-p="help">📖 Инструкция</button>
 </div>
 
