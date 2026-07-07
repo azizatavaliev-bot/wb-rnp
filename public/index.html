@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="shortcut icon" href="/favicon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260708">
+<link rel="stylesheet" href="style.css?v=20260709">
 </head>
 <body>
 <div class="top">
@@ -767,114 +767,138 @@ document.addEventListener('click', e => {
 
   <div class="day-modal-header">
     <h2 id="dayTitle" style="margin:0 0 4px">➕ Данные за день</h2>
-    <p class="day-modal-sub">Кликни по дате в календаре → заполни показатели → сохрани</p>
+    <p class="day-modal-sub" id="dayModalSub">Как хочешь внести данные?</p>
   </div>
   <input type="hidden" id="dId">
 
-  <!-- SKU + upload row -->
-  <div class="day-sku-row">
-    <div class="fld" style="flex:1;min-width:0">
-      <label>Товар</label>
-      <select id="daySku" onchange="App.renderDayCal()"><option value="">— выбери товар —</option></select>
-    </div>
-    <div class="day-sku-actions">
-      <button class="btn ghost sm" onclick="App.downloadTemplate()" title="Скачать шаблон CSV">📋 Шаблон</button>
-      <button class="btn sm" onclick="document.getElementById('dayFileInput').click()" title="Загрузить Excel/CSV">📂 Файл</button>
-      <input type="file" id="dayFileInput" accept=".csv,.xlsx,.xls" style="display:none" onchange="App.handleCsvFile(this)">
+  <!-- ЭКРАН 1: выбор способа -->
+  <div class="day-choice-screen" id="dayChoiceScreen">
+    <div class="day-choice-grid">
+      <div class="day-choice-card" onclick="App.showDayManual()">
+        <div class="day-choice-icon">✍️</div>
+        <div class="day-choice-title">Внести вручную</div>
+        <div class="day-choice-sub">Выбери дату в календаре и заполни показатели по одному товару</div>
+      </div>
+      <div class="day-choice-card" onclick="App.showDayUpload()">
+        <div class="day-choice-icon">📂</div>
+        <div class="day-choice-title">Загрузить файлом</div>
+        <div class="day-choice-sub">Excel/CSV сразу за много дней и товаров — быстрее для больших объёмов</div>
+      </div>
     </div>
   </div>
 
-  <!-- Visual Calendar -->
-  <div class="day-cal-section">
-    <div class="day-cal-nav">
-      <button class="day-cal-nav-btn" onclick="App.dayCalShift(-1)">‹</button>
-      <span class="day-cal-month-lbl" id="dayCalMonthLabel">—</span>
-      <button class="day-cal-nav-btn" onclick="App.dayCalShift(1)">›</button>
+  <!-- ЭКРАН 2: загрузка файла -->
+  <div class="day-upload-screen" id="dayUploadScreen" style="display:none">
+    <button class="day-back-btn" onclick="App.showDayChoice()">‹ Назад к выбору</button>
+    <div class="day-dropzone" id="dayDropzone" onclick="document.getElementById('dayFileInput').click()">
+      <div class="day-dropzone-icon">📂</div>
+      <div class="day-dropzone-title">Перетащи файл сюда или нажми, чтобы выбрать</div>
+      <div class="day-dropzone-sub">Поддерживаются .csv, .xlsx, .xls</div>
     </div>
-    <div class="day-cal-dows">
-      <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+    <input type="file" id="dayFileInput" accept=".csv,.xlsx,.xls" style="display:none" onchange="App.handleCsvFile(this)">
+    <div class="day-upload-actions">
+      <button class="btn ghost" onclick="App.downloadTemplate()">📋 Скачать шаблон CSV</button>
     </div>
-    <div class="day-cal-grid" id="dayCalGrid"></div>
-    <div class="day-cal-bottom">
+  </div>
+
+  <!-- ЭКРАН 3: ручной ввод -->
+  <div class="day-manual-screen" id="dayManualScreen" style="display:none">
+    <button class="day-back-btn" id="dayManualBackBtn" onclick="App.showDayChoice()">‹ Назад к выбору</button>
+
+    <div class="fld" style="margin-bottom:14px">
+      <label>Товар</label>
+      <select id="daySku" onchange="App.renderDayCal()"><option value="">— выбери товар —</option></select>
+    </div>
+
+    <!-- Visual Calendar -->
+    <div class="day-cal-section">
+      <div class="day-cal-nav">
+        <button class="day-cal-nav-btn" onclick="App.dayCalShift(-1)">‹</button>
+        <span class="day-cal-month-lbl" id="dayCalMonthLabel">—</span>
+        <button class="day-cal-nav-btn" onclick="App.dayCalShift(1)">›</button>
+      </div>
+      <div class="day-cal-dows">
+        <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+      </div>
+      <div class="day-cal-grid" id="dayCalGrid"></div>
       <div class="day-cal-legend">
         <span><span class="day-cal-leg c-has"></span> Есть данные</span>
         <span><span class="day-cal-leg c-miss"></span> Нет данных</span>
         <span><span class="day-cal-leg c-today"></span> Сегодня</span>
       </div>
-      <div class="day-cal-drop-hint">📂 Перетащи Excel/CSV файл прямо сюда</div>
     </div>
-  </div>
 
-  <!-- Selected date bar -->
-  <div class="day-sel-bar" id="daySelBar">
-    <span class="day-sel-icon">📅</span>
-    <span id="daySelLabel" class="day-sel-label">Выбери дату в календаре</span>
-    <input type="date" id="dayDate" class="day-date-input">
-  </div>
+    <!-- Selected date bar -->
+    <div class="day-sel-bar" id="daySelBar">
+      <span class="day-sel-icon">📅</span>
+      <span id="daySelLabel" class="day-sel-label">Выбери дату в календаре</span>
+      <input type="date" id="dayDate" class="day-date-input">
+    </div>
 
-  <div class="day-divider"><span>данные за выбранный день</span></div>
+    <div class="day-divider"><span>данные за выбранный день</span></div>
 
-  <!-- Заказы и продажи -->
-  <div class="msec">
-    <div class="msec-hd">
-      <div class="msec-t">📦 Заказы и продажи</div>
-      <div class="msec-hint">Заказы — это новые покупки. Продажи (выкупы) — покупатель получил и не вернул. Разрыв = 5–14 дней.</div>
+    <!-- Заказы и продажи -->
+    <div class="msec">
+      <div class="msec-hd">
+        <div class="msec-t">📦 Заказы и продажи</div>
+        <div class="msec-hint">Заказы — это новые покупки. Продажи (выкупы) — покупатель получил и не вернул. Разрыв = 5–14 дней.</div>
+      </div>
+      <div class="grid3" style="padding:14px">
+        <div class="fld"><label>Заказы, шт <span class="tip" data-tip="Сколько человек оформили заказ за этот день">?</span></label><input type="number" id="dayOrdQ" min="0" placeholder="0"></div>
+        <div class="fld"><label>Заказы, ₽ <span class="tip" data-tip="Сумма всех заказов за день по цене продажи">?</span></label><input type="number" id="dayOrdS" min="0" placeholder="0"></div>
+        <div class="fld"><label>СПП % <span class="tip" data-tip="Скидка покупателя от WB (СПП). Смотри в аналитике кабинета WB">?</span></label><input type="number" id="daySpp" min="0" max="100" step="0.1" placeholder="0"></div>
+        <div class="fld"><label>Продажи (выкупы), шт <span class="tip" data-tip="Покупатель получил товар и принял его — это выкуп. Считается с задержкой от заказа.">?</span></label><input type="number" id="dayBuyQ" min="0" placeholder="0"></div>
+        <div class="fld"><label>Продажи (выкупы), ₽ <span class="tip" data-tip="Сумма выкупов = деньги, которые WB перечислит за вычетом комиссии и логистики">?</span></label><input type="number" id="dayBuyS" min="0" placeholder="0"></div>
+        <div class="fld"><label>Раздачи, шт <span class="tip" data-tip="Бесплатные раздачи для повышения рейтинга/отзывов. Учитываются отдельно.">?</span></label><input type="number" id="dayGiveaway" min="0" placeholder="0"></div>
+      </div>
     </div>
-    <div class="grid3" style="padding:14px">
-      <div class="fld"><label>Заказы, шт <span class="tip" data-tip="Сколько человек оформили заказ за этот день">?</span></label><input type="number" id="dayOrdQ" min="0" placeholder="0"></div>
-      <div class="fld"><label>Заказы, ₽ <span class="tip" data-tip="Сумма всех заказов за день по цене продажи">?</span></label><input type="number" id="dayOrdS" min="0" placeholder="0"></div>
-      <div class="fld"><label>СПП % <span class="tip" data-tip="Скидка покупателя от WB (СПП). Смотри в аналитике кабинета WB">?</span></label><input type="number" id="daySpp" min="0" max="100" step="0.1" placeholder="0"></div>
-      <div class="fld"><label>Продажи (выкупы), шт <span class="tip" data-tip="Покупатель получил товар и принял его — это выкуп. Считается с задержкой от заказа.">?</span></label><input type="number" id="dayBuyQ" min="0" placeholder="0"></div>
-      <div class="fld"><label>Продажи (выкупы), ₽ <span class="tip" data-tip="Сумма выкупов = деньги, которые WB перечислит за вычетом комиссии и логистики">?</span></label><input type="number" id="dayBuyS" min="0" placeholder="0"></div>
-      <div class="fld"><label>Раздачи, шт <span class="tip" data-tip="Бесплатные раздачи для повышения рейтинга/отзывов. Учитываются отдельно.">?</span></label><input type="number" id="dayGiveaway" min="0" placeholder="0"></div>
-    </div>
-  </div>
 
-  <!-- Воронка -->
-  <div class="msec">
-    <div class="msec-hd">
-      <div class="msec-t">👁 Воронка трафика</div>
-      <div class="msec-hint">Показы → Клики → Корзина → Заказ. Каждый этап показывает конверсию. Берётся из аналитики WB.</div>
+    <!-- Воронка -->
+    <div class="msec">
+      <div class="msec-hd">
+        <div class="msec-t">👁 Воронка трафика</div>
+        <div class="msec-hint">Показы → Клики → Корзина → Заказ. Каждый этап показывает конверсию. Берётся из аналитики WB.</div>
+      </div>
+      <div class="grid3" style="padding:14px">
+        <div class="fld"><label>Показы <span class="tip" data-tip="Сколько раз карточка появилась в поиске или каталоге WB">?</span></label><input type="number" id="dayShows" min="0" placeholder="0"></div>
+        <div class="fld"><label>Клики <span class="tip" data-tip="Сколько раз открыли карточку товара">?</span></label><input type="number" id="dayClicks" min="0" placeholder="0"></div>
+        <div class="fld"><label>Корзина, шт <span class="tip" data-tip="Добавили в корзину — ещё не купили, но намерение есть">?</span></label><input type="number" id="dayCart" min="0" placeholder="0"></div>
+        <div class="fld"><label>Остаток на WB, шт <span class="tip" data-tip="Текущий остаток на складе WB на конец дня. Важно следить чтобы не уйти в 0.">?</span></label><input type="number" id="dayStock" min="0" placeholder="0"></div>
+      </div>
     </div>
-    <div class="grid3" style="padding:14px">
-      <div class="fld"><label>Показы <span class="tip" data-tip="Сколько раз карточка появилась в поиске или каталоге WB">?</span></label><input type="number" id="dayShows" min="0" placeholder="0"></div>
-      <div class="fld"><label>Клики <span class="tip" data-tip="Сколько раз открыли карточку товара">?</span></label><input type="number" id="dayClicks" min="0" placeholder="0"></div>
-      <div class="fld"><label>Корзина, шт <span class="tip" data-tip="Добавили в корзину — ещё не купили, но намерение есть">?</span></label><input type="number" id="dayCart" min="0" placeholder="0"></div>
-      <div class="fld"><label>Остаток на WB, шт <span class="tip" data-tip="Текущий остаток на складе WB на конец дня. Важно следить чтобы не уйти в 0.">?</span></label><input type="number" id="dayStock" min="0" placeholder="0"></div>
-    </div>
-  </div>
 
-  <!-- Реклама -->
-  <div class="msec">
-    <div class="msec-hd">
-      <div class="msec-t">📣 Реклама (РК)</div>
-      <div class="msec-hint">Данные по платным рекламным кампаниям WB. Берутся из раздела «Реклама» в кабинете WB.</div>
+    <!-- Реклама -->
+    <div class="msec">
+      <div class="msec-hd">
+        <div class="msec-t">📣 Реклама (РК)</div>
+        <div class="msec-hint">Данные по платным рекламным кампаниям WB. Берутся из раздела «Реклама» в кабинете WB.</div>
+      </div>
+      <div class="grid3" style="padding:14px">
+        <div class="fld"><label>Показы РК <span class="tip" data-tip="Платные показы из рекламных кампаний (отдельно от органических)">?</span></label><input type="number" id="dayAdsShows" min="0" placeholder="0"></div>
+        <div class="fld"><label>Клики РК <span class="tip" data-tip="Клики по рекламным объявлениям">?</span></label><input type="number" id="dayAdsClicks" min="0" placeholder="0"></div>
+        <div class="fld"><label>Расход РК, ₽ <span class="tip" data-tip="Сколько потрачено на рекламу за день. Влияет на ДРР.">?</span></label><input type="number" id="dayAdsSpend" min="0" placeholder="0"></div>
+        <div class="fld"><label>Заказов с РК <span class="tip" data-tip="Сколько заказов пришло через рекламные кампании WB">?</span></label><input type="number" id="dayAdsOrdQ" min="0" placeholder="0"></div>
+        <div class="fld"><label>Корзин с РК <span class="tip" data-tip="Добавлений в корзину через рекламные кампании">?</span></label><input type="number" id="dayAdsCart" min="0" placeholder="0"></div>
+      </div>
     </div>
-    <div class="grid3" style="padding:14px">
-      <div class="fld"><label>Показы РК <span class="tip" data-tip="Платные показы из рекламных кампаний (отдельно от органических)">?</span></label><input type="number" id="dayAdsShows" min="0" placeholder="0"></div>
-      <div class="fld"><label>Клики РК <span class="tip" data-tip="Клики по рекламным объявлениям">?</span></label><input type="number" id="dayAdsClicks" min="0" placeholder="0"></div>
-      <div class="fld"><label>Расход РК, ₽ <span class="tip" data-tip="Сколько потрачено на рекламу за день. Влияет на ДРР.">?</span></label><input type="number" id="dayAdsSpend" min="0" placeholder="0"></div>
-      <div class="fld"><label>Заказов с РК <span class="tip" data-tip="Сколько заказов пришло через рекламные кампании WB">?</span></label><input type="number" id="dayAdsOrdQ" min="0" placeholder="0"></div>
-      <div class="fld"><label>Корзин с РК <span class="tip" data-tip="Добавлений в корзину через рекламные кампании">?</span></label><input type="number" id="dayAdsCart" min="0" placeholder="0"></div>
-    </div>
-  </div>
 
-  <!-- Возвраты и хранение -->
-  <div class="msec">
-    <div class="msec-hd">
-      <div class="msec-t">↩️ Возвраты и хранение</div>
-      <div class="msec-hint">Возвраты снижают выкуп%. Хранение — ежедневная плата WB за хранение товара на складе.</div>
+    <!-- Возвраты и хранение -->
+    <div class="msec">
+      <div class="msec-hd">
+        <div class="msec-t">↩️ Возвраты и хранение</div>
+        <div class="msec-hint">Возвраты снижают выкуп%. Хранение — ежедневная плата WB за хранение товара на складе.</div>
+      </div>
+      <div class="grid3" style="padding:14px">
+        <div class="fld"><label>Возвраты, шт <span class="tip" data-tip="Сколько товаров вернули покупатели за этот день">?</span></label><input type="number" id="dayReturnQ" min="0" placeholder="0"></div>
+        <div class="fld"><label>Хранение, ₽ <span class="tip" data-tip="Расходы на хранение на складе WB за день. Смотри в финансовых отчётах кабинета WB.">?</span></label><input type="number" id="dayStorageCost" min="0" placeholder="0"></div>
+      </div>
     </div>
-    <div class="grid3" style="padding:14px">
-      <div class="fld"><label>Возвраты, шт <span class="tip" data-tip="Сколько товаров вернули покупатели за этот день">?</span></label><input type="number" id="dayReturnQ" min="0" placeholder="0"></div>
-      <div class="fld"><label>Хранение, ₽ <span class="tip" data-tip="Расходы на хранение на складе WB за день. Смотри в финансовых отчётах кабинета WB.">?</span></label><input type="number" id="dayStorageCost" min="0" placeholder="0"></div>
-    </div>
-  </div>
 
-  <datalist id="skuList"></datalist>
-  <div class="sheet-act">
-    <button class="btn ghost" onclick="App.close('mDay')">Отмена</button>
-    <button class="btn" onclick="App.saveDay()">💾 Сохранить день</button>
+    <datalist id="skuList"></datalist>
+    <div class="sheet-act">
+      <button class="btn ghost" onclick="App.close('mDay')">Отмена</button>
+      <button class="btn" onclick="App.saveDay()">💾 Сохранить день</button>
+    </div>
   </div>
 </div></div>
 
@@ -988,6 +1012,6 @@ document.addEventListener('click', e => {
 </div>
 
 <div class="toast" id="toast"></div>
-<script src="app.js?v=20260708"></script>
+<script src="app.js?v=20260709"></script>
 </body>
 </html>

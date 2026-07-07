@@ -1121,6 +1121,7 @@ const App = (() => {
   // ---- Day modal ----
   function openDay(sku) {
     $('dayTitle').textContent = 'Данные за день';
+    $('dayModalSub').textContent = 'Как хочешь внести данные?';
     $('dId').value = '';
     const today = new Date().toISOString().slice(0, 10);
     $('dayDate').value = today;
@@ -1135,6 +1136,7 @@ const App = (() => {
     $('skuList').innerHTML = db.products.map(p=>`<option value="${esc(p.sku)}">${esc(p.name||p.sku)}</option>`).join('');
     _updateDaySelBar(today);
     $('mDay').classList.add('open');
+    showDayChoice();
     renderDayCal();
     _initDayDrop();
   }
@@ -1153,8 +1155,29 @@ const App = (() => {
         $('dayTitle').textContent = `➕ Добавить данные: ${date}`;
       }
       _updateDaySelBar(date);
+      showDayManual(); // клик по конкретной дате в таблице — сразу в ручной режим, без экрана выбора
       renderDayCal();
     }, 50);
+  }
+  // ---- Экраны модалки «День»: выбор / ручной ввод / загрузка файла ----
+  function showDayChoice() {
+    $('dayChoiceScreen').style.display = '';
+    $('dayUploadScreen').style.display = 'none';
+    $('dayManualScreen').style.display = 'none';
+    $('dayModalSub').textContent = 'Как хочешь внести данные?';
+  }
+  function showDayUpload() {
+    $('dayChoiceScreen').style.display = 'none';
+    $('dayUploadScreen').style.display = '';
+    $('dayManualScreen').style.display = 'none';
+    $('dayModalSub').textContent = 'Загрузи Excel/CSV — данные добавятся сразу за все дни и товары из файла';
+  }
+  function showDayManual() {
+    $('dayChoiceScreen').style.display = 'none';
+    $('dayUploadScreen').style.display = 'none';
+    $('dayManualScreen').style.display = '';
+    $('dayModalSub').textContent = 'Кликни по дате в календаре → заполни показатели → сохрани';
+    renderDayCal();
   }
   function _fillDayForm(d) {
     $('dayOrdQ').value = d.ordQ || '';
@@ -1663,7 +1686,7 @@ const App = (() => {
   }
 
   window.addEventListener('DOMContentLoaded', init);
-  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,fetchFxRates,wbTest,wbSync,wbImportCards,theme,calcTestPrice,downloadTemplate,exportData,importCsv,handleCsvFile,downloadCostTemplate,importCosts,handleCostFile,shiftMonth,archiveMonth,toggleHidden,setAllVisibility,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory,openMonthPlan,saveMonthPlan,renderDayCal,dayCalShift,dayCalPick,openCabinetModal,createCabinet,switchCabinet,renameCabinet,deleteCabinet};
+  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,fetchFxRates,wbTest,wbSync,wbImportCards,theme,calcTestPrice,downloadTemplate,exportData,importCsv,handleCsvFile,downloadCostTemplate,importCosts,handleCostFile,shiftMonth,archiveMonth,toggleHidden,setAllVisibility,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory,openMonthPlan,saveMonthPlan,renderDayCal,dayCalShift,dayCalPick,openCabinetModal,createCabinet,switchCabinet,renameCabinet,deleteCabinet,showDayChoice,showDayUpload,showDayManual};
 })();
 
 // Аккордеон инструкции (глобальные функции)
