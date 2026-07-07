@@ -21,18 +21,48 @@ const sessions = new Map(); // token → {userId, email, name, expires}
 setInterval(() => { for (const [k, s] of sessions) if (s.expires < Date.now()) sessions.delete(k); }, 3600000);
 
 // ---- In-memory DB cache (ключевое ускорение) ----
-const dbCache = new Map(); // userId → db object
-function loadUserDB(userId) {
-  if (dbCache.has(userId)) return dbCache.get(userId);
+const dbCache = new Map(); // "userId::cabinetId" → db object
+function loadUserDB(userId, cabinetId) {
+  const cid = cabinetId || 'c1';
+  const key = userId + '::' + cid;
+  if (dbCache.has(key)) return dbCache.get(key);
   let db;
-  try { db = Object.assign({}, DEFAULT_DB, JSON.parse(fs.readFileSync(userDbPath(userId), 'utf8'))); }
+  try { db = Object.assign({}, DEFAULT_DB, JSON.parse(fs.readFileSync(userDbPath(userId, cid), 'utf8'))); }
   catch { db = JSON.parse(JSON.stringify(DEFAULT_DB)); }
-  dbCache.set(userId, db);
+  dbCache.set(key, db);
   return db;
 }
-function saveUserDB(userId, db) {
-  dbCache.set(userId, db);
-  try { fs.writeFileSync(userDbPath(userId), JSON.stringify(db)); } catch {}
+function saveUserDB(userId, cabinetId, db) {
+  const cid = cabinetId || 'c1';
+  dbCache.set(userId + '::' + cid, db);
+  try { fs.writeFileSync(userDbPath(userId, cid), JSON.stringify(db)); } catch {}
+}
+
+// ---- Кабинеты: несколько магазинов/аккаунтов WB внутри одного логина ----
+function cabinetsMetaPath(userId) {
+  const dir = path.join(DATA, 'u', String(userId));
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return path.join(dir, 'cabinets.json');
+}
+function loadCabinetsMeta(userId) {
+  const fp = cabinetsMetaPath(userId);
+  try {
+    const meta = JSON.parse(fs.readFileSync(fp, 'utf8'));
+    if (meta && Array.isArray(meta.list) && meta.list.length) return meta;
+  } catch {}
+  // Миграция: у пользователя уже есть db.json (старый однокабинетный формат) → заворачиваем в кабинет "c1"
+  const meta = { activeId: 'c1', list: [{ id: 'c1', name: 'Основной кабинет', createdAt: new Date().toISOString() }] };
+  saveCabinetsMeta(userId, meta);
+  return meta;
+}
+function saveCabinetsMeta(userId, meta) {
+  fs.writeFileSync(cabinetsMetaPath(userId), JSON.stringify(meta, null, 2));
+}
+function archiveDirFor(userId, cabinetId) {
+  const cid = cabinetId || 'c1';
+  return cid === 'c1'
+    ? path.join(DATA, 'u', String(userId), 'archive')
+    : path.join(DATA, 'u', String(userId), 'cabinets', cid, 'archive');
 }
 
 // ---- Rate limiting (защита от брутфорса) ----
@@ -138,16 +168,21 @@ const DEFAULT_DB = {
   campaigns: [],
   log: []
 };
-function userDbPath(userId) {
+function userDbPath(userId, cabinetId) {
   const dir = path.join(DATA, 'u', String(userId));
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  return path.join(dir, 'db.json');
+  const cid = cabinetId || 'c1';
+  if (cid === 'c1') return path.join(dir, 'db.json'); // старый путь — для совместимости с уже существующими пользователями
+  const cabDir = path.join(dir, 'cabinets');
+  if (!fs.existsSync(cabDir)) fs.mkdirSync(cabDir, { recursive: true });
+  return path.join(cabDir, cid + '.json');
 }
 // loadUserDB / saveUserDB определены ниже после dbCache
 
 // ---- Demo seed ----
-function seedUserDemo(userId) {
-  const db = loadUserDB(userId);
+function seedUserDemo(userId, cabinetId) {
+  const cid = cabinetId || 'c1';
+  const db = loadUserDB(userId, cid);
   if (db.products.length) return; // already seeded
 
   const prods = [
@@ -258,7 +293,7 @@ function seedUserDemo(userId) {
   db.plans    = plans;
   db.settings = { apiKey:'', taxRate:7, usdRate:90 };
   addLog(db, '🎉 Демо-кабинет загружен: 10 товаров, 3 месяца данных (апрель–июнь 2026). Замени на свои!');
-  saveUserDB(userId, db);
+  saveUserDB(userId, cid, db);
 }
 
 function addLog(db, msg) {
@@ -288,6 +323,7 @@ function ensureDemoUser() {
 // ---- WB Statistics API ----
 const WB_BASE = 'https://statistics-api.wildberries.ru';
 const WB_CONTENT = 'https://content-api.wildberries.ru';
+const WB_PRICES = 'https://discounts-prices-api.wildberries.ru';
 async function wbGet(key, urlPath, base) {
   const res = await fetch((base||WB_BASE) + urlPath, { headers: { Authorization: 'Bearer ' + key.replace(/^Bearer\s*/i,'') } });
   if (!res.ok) throw new Error('WB ' + res.status + ' ' + (await res.text()).slice(0, 200));
@@ -311,6 +347,29 @@ async function wbGetCards(key) {
     cursor = { updatedAt: d.cursor.updatedAt, nmID: d.cursor.nmID };
   }
   return cards;
+}
+
+// ---- WB Prices API: fetch current selling price per nmID ----
+// content-api cards/list does NOT return price — it lives on a separate service.
+async function wbGetPrices(key) {
+  const token = key.replace(/^Bearer\s*/i,'');
+  const priceByNm = {};
+  let offset = 0;
+  for (let i = 0; i < 20; i++) { // max 20 pages × 1000
+    const res = await fetch(`${WB_PRICES}/api/v2/list/goods/filter?limit=1000&offset=${offset}`, {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    if (!res.ok) break;
+    const d = await res.json();
+    const goods = d.data?.listGoods || [];
+    goods.forEach(g => {
+      const sz = g.sizes?.[0];
+      if (sz) priceByNm[String(g.nmID)] = sz.discountedPrice || sz.price || 0;
+    });
+    if (goods.length < 1000) break;
+    offset += 1000;
+  }
+  return priceByNm;
 }
 
 async function wbSync(db, key, dateFrom) {
@@ -423,10 +482,25 @@ const server = http.createServer(async (req, res) => {
     return send(res, 200, { user: { id:sess.userId, email:sess.email, name:sess.name } });
   }
 
+  // ---- FX: актуальный курс USD и других валют (ЦБ РФ, публичный API, без ключа) ----
+  if (p === '/api/fx/rates' && req.method === 'GET') {
+    try {
+      const r = await fetch('https://www.cbr-xml-daily.ru/daily_json.js');
+      if (!r.ok) throw new Error('CBR ' + r.status);
+      const d = await r.json();
+      const usd = d.Valute?.USD?.Value;
+      const eur = d.Valute?.EUR?.Value;
+      const kgs = d.Valute?.KGS ? d.Valute.KGS.Value / (d.Valute.KGS.Nominal || 1) : null;
+      if (!usd) throw new Error('нет данных USD');
+      return send(res, 200, { ok:true, usd: Math.round(usd*100)/100, eur: eur ? Math.round(eur*100)/100 : null, kgs, date: d.Date });
+    } catch(e) { return send(res, 200, { ok:false, msg: 'Не удалось получить курс: ' + e.message }); }
+  }
+
   if (p === '/api/load-demo' && req.method === 'POST') {
     const sess = getSession(req);
     if (!sess) return send(res, 401, { error: 'unauthorized' });
-    seedUserDemo(sess.userId);
+    const meta = loadCabinetsMeta(sess.userId);
+    seedUserDemo(sess.userId, meta.activeId);
     return send(res, 200, { ok:true });
   }
 
@@ -464,21 +538,78 @@ const server = http.createServer(async (req, res) => {
     const sess = getSession(req);
     if (!sess) return send(res, 401, { error: 'unauthorized' });
     const userId = sess.userId;
-    const db = loadUserDB(userId);
+    const meta = loadCabinetsMeta(userId);
 
     try {
-      if (p === '/api/state' && req.method === 'GET') return sendGzip(req, res, 200, db);
+      // ---- Управление кабинетами (несколько магазинов WB в одном логине) ----
+      if (p === '/api/cabinets' && req.method === 'GET') {
+        return send(res, 200, { activeId: meta.activeId, list: meta.list });
+      }
+
+      if (p === '/api/cabinets/create' && req.method === 'POST') {
+        const b = await body(req);
+        const name = (b.name || '').trim() || `Кабинет ${meta.list.length + 1}`;
+        const id = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+        meta.list.push({ id, name, createdAt: new Date().toISOString() });
+        meta.activeId = id;
+        saveCabinetsMeta(userId, meta);
+        saveUserDB(userId, id, JSON.parse(JSON.stringify(DEFAULT_DB))); // создаём пустой файл кабинета сразу
+        return send(res, 200, { ok:true, activeId: id, list: meta.list });
+      }
+
+      if (p === '/api/cabinets/switch' && req.method === 'POST') {
+        const b = await body(req);
+        const exists = meta.list.find(c => c.id === b.id);
+        if (!exists) return send(res, 200, { ok:false, msg:'Кабинет не найден' });
+        meta.activeId = b.id;
+        saveCabinetsMeta(userId, meta);
+        return send(res, 200, { ok:true, activeId: meta.activeId, list: meta.list });
+      }
+
+      if (p === '/api/cabinets/rename' && req.method === 'POST') {
+        const b = await body(req);
+        const c = meta.list.find(c => c.id === b.id);
+        if (!c) return send(res, 200, { ok:false, msg:'Кабинет не найден' });
+        c.name = (b.name || '').trim() || c.name;
+        saveCabinetsMeta(userId, meta);
+        return send(res, 200, { ok:true, list: meta.list });
+      }
+
+      if (p === '/api/cabinets/delete' && req.method === 'POST') {
+        const b = await body(req);
+        if (meta.list.length <= 1) return send(res, 200, { ok:false, msg:'Нельзя удалить единственный кабинет' });
+        const idx = meta.list.findIndex(c => c.id === b.id);
+        if (idx < 0) return send(res, 200, { ok:false, msg:'Кабинет не найден' });
+        meta.list.splice(idx, 1);
+        if (meta.activeId === b.id) meta.activeId = meta.list[0].id;
+        saveCabinetsMeta(userId, meta);
+        // Мягкое удаление — файл не стираем, а переименовываем, данные восстановимы
+        try {
+          const fp = userDbPath(userId, b.id);
+          if (fs.existsSync(fp)) fs.renameSync(fp, fp + '.trash');
+        } catch {}
+        dbCache.delete(userId + '::' + b.id);
+        return send(res, 200, { ok:true, activeId: meta.activeId, list: meta.list });
+      }
+
+      const cabinetId = meta.activeId;
+      const db = loadUserDB(userId, cabinetId);
+
+      if (p === '/api/state' && req.method === 'GET') {
+        return sendGzip(req, res, 200, { ...db, _cabinets: meta.list, _activeCabinetId: cabinetId });
+      }
 
       if (p === '/api/save' && req.method === 'POST') {
         const b = await body(req);
         ['settings','products','plans','days','campaigns'].forEach(k => { if (b[k] !== undefined) db[k] = b[k]; });
-        saveUserDB(userId, db);
+        saveUserDB(userId, cabinetId, db);
         return send(res, 200, { ok:true });
       }
 
       if (p === '/api/wb/test' && req.method === 'POST') {
         const b = await body(req);
         const key = b.apiKey || db.settings.apiKey;
+        if (!key) return send(res, 200, { ok:false, msg:'Нет API-ключа' });
         try {
           const today = new Date().toISOString().slice(0, 10);
           const o = await wbGet(key, `/api/v1/supplier/orders?dateFrom=${today}&flag=1`);
@@ -494,11 +625,11 @@ const server = http.createServer(async (req, res) => {
         const dateFrom = b.dateFrom || new Date(Date.now() - 30*864e5).toISOString().slice(0, 10);
         try {
           const r = await wbSync(db, key, dateFrom);
-          saveUserDB(userId, db);
+          saveUserDB(userId, cabinetId, db);
           return send(res, 200, { ok:true, msg:`Готово. Заказы ${r.orders}, выкупы ${r.sales}, остатки ${r.stocks}`, result:r });
         } catch(e) {
           addLog(db, 'Ошибка синка: '+e.message);
-          saveUserDB(userId, db);
+          saveUserDB(userId, cabinetId, db);
           return send(res, 200, { ok:false, msg:e.message });
         }
       }
@@ -506,7 +637,7 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/archive/save' && req.method === 'POST') {
         const b = await body(req);
         if (!b.ym) return send(res, 200, { ok:false, msg:'Нет ym' });
-        const userArcDir = path.join(DATA, 'u', String(userId), 'archive');
+        const userArcDir = archiveDirFor(userId, cabinetId);
         if (!fs.existsSync(userArcDir)) fs.mkdirSync(userArcDir, { recursive: true });
         const file = path.join(userArcDir, b.ym+'.json');
         fs.writeFileSync(file, JSON.stringify(b, null, 2));
@@ -514,7 +645,7 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (p === '/api/archive/list' && req.method === 'GET') {
-        const userArcDir = path.join(DATA, 'u', String(userId), 'archive');
+        const userArcDir = archiveDirFor(userId, cabinetId);
         if (!fs.existsSync(userArcDir)) return send(res, 200, []);
         const files = fs.readdirSync(userArcDir).filter(f => f.endsWith('.json')).sort().reverse();
         const list = files.map(f => {
@@ -526,7 +657,7 @@ const server = http.createServer(async (req, res) => {
 
       if (p.startsWith('/api/archive/view') && req.method === 'GET') {
         const ym = u.searchParams.get('ym');
-        const userArcDir = path.join(DATA, 'u', String(userId), 'archive');
+        const userArcDir = archiveDirFor(userId, cabinetId);
         const file = path.join(userArcDir, (ym||'')+'.json');
         if (!ym || !fs.existsSync(file)) return send(res, 404, { error:'not found' });
         return send(res, 200, JSON.parse(fs.readFileSync(file, 'utf8')));
@@ -538,26 +669,32 @@ const server = http.createServer(async (req, res) => {
         const key = b.apiKey || db.settings.apiKey;
         if (!key) return send(res, 200, { ok:false, msg:'Нет API-ключа WB' });
         try {
-          const cards = await wbGetCards(key);
-          let added = 0, updated = 0;
+          const [cards, priceByNm] = await Promise.all([
+            wbGetCards(key),
+            wbGetPrices(key).catch(() => ({})) // цены — best-effort, не роняем импорт если недоступно
+          ]);
+          let added = 0, updated = 0, needCost = 0;
           cards.forEach(card => {
             const sku = card.vendorCode || String(card.nmID);
             const name = (card.title || card.subjectName || sku).slice(0, 80);
             const nmId = String(card.nmID || '');
-            const price = card.sizes?.[0]?.price || 0;
+            const price = priceByNm[nmId] || card.sizes?.[0]?.price || 0;
             const existing = db.products.find(p => p.sku === sku || p.wbId === nmId);
             if (existing) {
               existing.name = existing.name || name;
               existing.wbId = existing.wbId || nmId;
+              if (price && !existing.price) existing.price = price;
+              if (!existing.cost) needCost++;
               updated++;
             } else {
               db.products.push({ id:'wb'+nmId, sku, wbId:nmId, name, cost:0, pkg:0, commission:15, logistics:80, buyout:75, price, manager:'', status:'НЕ ВЫБРАНО', planDrr:15, category:'' });
-              added++;
+              added++; needCost++;
             }
           });
           if (b.apiKey) db.settings.apiKey = b.apiKey;
-          saveUserDB(userId, db);
-          return send(res, 200, { ok:true, added, updated, total:cards.length, msg:`Загружено ${cards.length} товаров: +${added} новых, ${updated} обновлено` });
+          saveUserDB(userId, cabinetId, db);
+          const costMsg = needCost > 0 ? ` ⚠️ У ${needCost} товаров нет себестоимости — заполни вручную в таблице «Товары и план».` : '';
+          return send(res, 200, { ok:true, added, updated, needCost, total:cards.length, msg:`Загружено ${cards.length} товаров: +${added} новых, ${updated} обновлено.${costMsg}` });
         } catch(e) { return send(res, 200, { ok:false, msg:'Ошибка WB API: ' + e.message }); }
       }
 
@@ -577,7 +714,7 @@ const server = http.createServer(async (req, res) => {
           if (r.planDrr   !== undefined && r.planDrr   !== '') prod.planDrr   = parseFloat(r.planDrr)||0;
           updated++;
         });
-        saveUserDB(userId, db);
+        saveUserDB(userId, cabinetId, db);
         return send(res, 200, { ok:true, updated, msg:`Обновлено ${updated} товаров` });
       }
 

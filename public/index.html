@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="shortcut icon" href="/favicon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260706">
+<link rel="stylesheet" href="style.css?v=20260707">
 </head>
 <body>
 <div class="top">
@@ -22,10 +22,11 @@
       </div>
     </div>
     <div class="top-divider"></div>
-    <div class="top-shop" id="topShop">
+    <div class="top-shop" id="topShop" onclick="App.openCabinetModal()" title="Переключить кабинет / магазин">
       <span class="top-shop-icon">🏪</span>
       <span class="top-shop-name" id="topShopName">Мой магазин</span>
       <span class="pulse"></span>
+      <span class="cabinet-chevron">▾</span>
     </div>
   </div>
 
@@ -404,10 +405,16 @@ document.addEventListener('click', e => {
             <div class="tax-field">
               <div class="tax-label">Курс USD ₽</div>
               <input type="number" id="usdRate" class="tax-input" min="1" step="0.01" placeholder="90">
-              <div class="tax-hint">Для отображения в $</div>
+              <div class="tax-hint" id="usdRateHint">Для отображения в $</div>
+            </div>
+            <div class="tax-field">
+              <div class="tax-label">Курс KGS ₽ <span class="tip" data-tip="Сом Кыргызстана к рублю — для отображения перечислений в сомах">?</span></div>
+              <input type="number" id="kgsRate" class="tax-input" min="0.01" step="0.001" placeholder="—">
+              <div class="tax-hint" id="kgsRateHint">Для отображения в сомах</div>
             </div>
           </div>
           <div class="set-actions" style="margin-top:16px">
+            <button class="btn ghost" onclick="App.fetchFxRates()" id="fxBtn">🔄 Обновить курс автоматически (ЦБ РФ)</button>
             <button class="btn" onclick="App.saveSettings()">💾 Сохранить</button>
           </div>
         </div>
@@ -957,6 +964,20 @@ document.addEventListener('click', e => {
   </div>
 </div></div>
 
+<!-- MODAL: переключатель кабинетов (магазинов WB) -->
+<div class="modal" id="mCabinets"><div class="sheet" style="max-width:560px">
+  <button class="modal-close" onclick="App.close('mCabinets')">✕</button>
+  <h2 style="margin:0 0 6px">🏪 Кабинеты</h2>
+  <p style="font-size:12px;color:var(--muted);margin:0 0 18px">Каждый кабинет — отдельный магазин WB: свой API-ключ, товары, план и история. Переключайся между ними в один клик.</p>
+
+  <div class="cab-modal-list" id="cabModalList"></div>
+
+  <div class="cab-modal-add">
+    <input type="text" id="cabModalNewName" placeholder="Название нового кабинета, например «Магазин 2»" onkeydown="if(event.key==='Enter')App.createCabinet()">
+    <button class="btn" onclick="App.createCabinet()">+ Добавить кабинет</button>
+  </div>
+</div></div>
+
 <!-- ТАБЫ ВНИЗУ как в Google Sheets -->
 <div class="sheet-tabs" id="sheetTabs">
   <button class="sheet-tab active" data-p="rnp">📊 Сводная</button>
@@ -967,6 +988,6 @@ document.addEventListener('click', e => {
 </div>
 
 <div class="toast" id="toast"></div>
-<script src="app.js?v=20260706"></script>
+<script src="app.js?v=20260707"></script>
 </body>
 </html>

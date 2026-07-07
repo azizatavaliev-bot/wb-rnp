@@ -787,13 +787,13 @@ const App = (() => {
       $('prRows').innerHTML = '';
     } else {
       $('prEmpty').style.display = 'none';
-      $('prRows').innerHTML = db.products.map((p, idx) => `<tr>
+      $('prRows').innerHTML = db.products.map((p, idx) => `<tr${!p.cost?' class="row-need-cost"':''}>
         <td><button class="del-btn" onclick="App.delProduct('${p.id}')" title="Удалить">✕</button></td>
         <td><input value="${esc(p.name||p.sku)}" onchange="App.updProd('${p.id}','name',this.value)"></td>
         <td style="color:var(--muted);font-size:11px">${esc(p.sku)}</td>
         <td><input value="${esc(p.wbId||'')}" onchange="App.updProd('${p.id}','wbId',this.value)" placeholder="артикул WB"></td>
         <td class="num"><input type="number" value="${p.price||0}" min="0" onchange="App.updProd('${p.id}','price',+this.value)"></td>
-        <td class="num"><input type="number" value="${p.cost||0}" min="0" onchange="App.updProd('${p.id}','cost',+this.value)"></td>
+        <td class="num"><input type="number" class="${!p.cost?'inp-need-cost':''}" value="${p.cost||0}" min="0" placeholder="⚠️ заполни" onchange="App.updProd('${p.id}','cost',+this.value)"></td>
         <td class="num"><input type="number" value="${p.pkg||0}" min="0" onchange="App.updProd('${p.id}','pkg',+this.value)"></td>
         <td class="num"><input type="number" value="${p.logistics||0}" min="0" onchange="App.updProd('${p.id}','logistics',+this.value)"></td>
         <td class="num"><input type="number" value="${p.commission||0}" min="0" max="100" step=".5" onchange="App.updProd('${p.id}','commission',+this.value)"></td>
@@ -914,6 +914,7 @@ const App = (() => {
     if($('apiKey'))  $('apiKey').value=s.apiKey||'';
     if($('taxRate')) $('taxRate').value=s.taxRate??7;
     if($('usdRate')) $('usdRate').value=s.usdRate??90;
+    if($('kgsRate')) $('kgsRate').value=s.kgsRate||'';
     if($('shopName')) $('shopName').value=s.shopName||'';
     // Профиль
     const letter = ($('topAvatar')?.textContent||'?');
@@ -1315,14 +1316,102 @@ const App = (() => {
     save(); close('mMonthPlan'); render(); toast('План сохранён ✅');
   }
 
+  // ---- Кабинеты (несколько магазинов WB в одном логине) ----
+  function openCabinetModal() {
+    renderCabinetModal();
+    $('mCabinets').classList.add('open');
+  }
+  function renderCabinetModal() {
+    const list = db._cabinets || [];
+    const activeId = db._activeCabinetId;
+    $('cabModalList').innerHTML = list.map(c => `
+      <div class="cab-card${c.id===activeId?' active':''}" onclick="App.switchCabinet('${c.id}')">
+        <div class="cab-card-icon">🏪</div>
+        <div class="cab-card-body">
+          <div class="cab-card-name">${esc(c.name)}</div>
+          <div class="cab-card-sub">создан ${c.createdAt ? new Date(c.createdAt).toLocaleDateString('ru') : ''}</div>
+        </div>
+        ${c.id===activeId?'<span class="cab-card-badge">Активен</span>':''}
+        <div class="cab-card-actions">
+          <button class="cab-card-btn" onclick="event.stopPropagation();App.renameCabinet('${c.id}','${esc(c.name).replace(/'/g,"\\'")}')" title="Переименовать">✏️</button>
+          ${list.length>1?`<button class="cab-card-btn" onclick="event.stopPropagation();App.deleteCabinet('${c.id}','${esc(c.name).replace(/'/g,"\\'")}')" title="Удалить">🗑</button>`:''}
+        </div>
+      </div>`).join('') || '<div style="padding:12px;font-size:12px;color:var(--muted)">Нет кабинетов</div>';
+  }
+  async function createCabinet() {
+    const name = $('cabModalNewName').value.trim();
+    if (!name) { toast('Введи название кабинета'); return; }
+    const r = await (await fetch('/api/cabinets/create', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name}) })).json();
+    if (!r.ok) { toast('❌ ' + (r.msg||'Ошибка')); return; }
+    $('cabModalNewName').value='';
+    await load(); buildCategoryTabs(); renderCabinetModal();
+    const shopEl=$('topShopName'); if(shopEl) shopEl.textContent = db.settings?.shopName || name;
+    if ($('p-settings')?.classList.contains('active')) renderSettings();
+    if ($('p-products')?.classList.contains('active')) renderProducts();
+    render();
+    toast(`✅ Кабинет «${name}» создан и открыт`);
+  }
+  async function switchCabinet(id) {
+    if (id === db._activeCabinetId) { close('mCabinets'); return; }
+    const r = await (await fetch('/api/cabinets/switch', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id}) })).json();
+    if (!r.ok) { toast('❌ ' + (r.msg||'Ошибка')); return; }
+    await load(); buildCategoryTabs(); renderCabinetModal();
+    const cab = (db._cabinets||[]).find(c=>c.id===id);
+    const shopName = db.settings?.shopName || cab?.name || 'Мой магазин';
+    const shopEl=$('topShopName'); if(shopEl) shopEl.textContent = shopName;
+    close('mCabinets');
+    if ($('p-settings')?.classList.contains('active')) renderSettings();
+    if ($('p-products')?.classList.contains('active')) renderProducts();
+    render();
+    toast(`✅ Переключено: ${cab?.name||''}`);
+  }
+  async function renameCabinet(id, oldName) {
+    const name = prompt('Новое название кабинета:', oldName);
+    if (!name || !name.trim() || name.trim() === oldName) return;
+    const r = await (await fetch('/api/cabinets/rename', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id, name:name.trim()}) })).json();
+    if (!r.ok) { toast('❌ ' + (r.msg||'Ошибка')); return; }
+    db._cabinets = r.list;
+    renderCabinetModal();
+    if (id === db._activeCabinetId) { const shopEl=$('topShopName'); if(shopEl && !db.settings?.shopName) shopEl.textContent = name.trim(); }
+    toast('✅ Переименовано');
+  }
+  async function deleteCabinet(id, name) {
+    if (!confirm(`Удалить кабинет «${name}»? Данные не будут стёрты безвозвратно, но кабинет исчезнет из списка.`)) return;
+    const r = await (await fetch('/api/cabinets/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id}) })).json();
+    if (!r.ok) { toast('❌ ' + (r.msg||'Ошибка')); return; }
+    await load(); buildCategoryTabs(); renderCabinetModal();
+    const cab = (db._cabinets||[]).find(c=>c.id===db._activeCabinetId);
+    const shopEl=$('topShopName'); if(shopEl) shopEl.textContent = db.settings?.shopName || cab?.name || 'Мой магазин';
+    if ($('p-settings')?.classList.contains('active')) renderSettings();
+    if ($('p-products')?.classList.contains('active')) renderProducts();
+    render();
+    toast(`🗑 Кабинет «${name}» удалён`);
+  }
+
   function saveSettings() {
     db.settings.apiKey=$('apiKey').value.trim();
     db.settings.taxRate=+$('taxRate').value||7;
     db.settings.usdRate=+$('usdRate').value||90;
+    db.settings.kgsRate=+($('kgsRate')?.value)||db.settings.kgsRate||0;
     const shopName=$('shopName')?.value.trim();
     if(shopName!=null) db.settings.shopName=shopName;
     const shopEl=$('topShopName'); if(shopEl) shopEl.textContent=shopName||'Мой магазин';
     save(); toast('Сохранено ✅');
+  }
+  async function fetchFxRates() {
+    const btn=$('fxBtn'); const prevTxt=btn.textContent;
+    btn.disabled=true; btn.textContent='⏳ Получаю курс...';
+    try {
+      const r = await (await fetch('/api/fx/rates')).json();
+      if (!r.ok) { toast('❌ '+(r.msg||'Ошибка получения курса')); return; }
+      if (r.usd) { $('usdRate').value = r.usd; $('usdRateHint').textContent = `ЦБ РФ на ${r.date?.slice(0,10)||'сегодня'}`; }
+      if (r.kgs) { $('kgsRate').value = r.kgs; $('kgsRateHint').textContent = `ЦБ РФ на ${r.date?.slice(0,10)||'сегодня'}`; }
+      db.settings.usdRate = r.usd || db.settings.usdRate;
+      db.settings.kgsRate = r.kgs || db.settings.kgsRate;
+      save();
+      toast('✅ Курс обновлён: $'+r.usd+(r.kgs?` · сом ${r.kgs.toFixed(3)}`:''));
+    } catch(e) { toast('❌ Ошибка сети: '+e.message); }
+    finally { btn.disabled=false; btn.textContent=prevTxt; }
   }
   async function wbTest() {
     const key=$('apiKey').value.trim(); if(!key){$('wbMsg').textContent='⚠️ Введи API-ключ';return;}
@@ -1574,7 +1663,7 @@ const App = (() => {
   }
 
   window.addEventListener('DOMContentLoaded', init);
-  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,wbTest,wbSync,wbImportCards,theme,calcTestPrice,downloadTemplate,exportData,importCsv,handleCsvFile,downloadCostTemplate,importCosts,handleCostFile,shiftMonth,archiveMonth,toggleHidden,setAllVisibility,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory,openMonthPlan,saveMonthPlan,renderDayCal,dayCalShift,dayCalPick};
+  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,fetchFxRates,wbTest,wbSync,wbImportCards,theme,calcTestPrice,downloadTemplate,exportData,importCsv,handleCsvFile,downloadCostTemplate,importCosts,handleCostFile,shiftMonth,archiveMonth,toggleHidden,setAllVisibility,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory,openMonthPlan,saveMonthPlan,renderDayCal,dayCalShift,dayCalPick,openCabinetModal,createCabinet,switchCabinet,renameCabinet,deleteCabinet};
 })();
 
 // Аккордеон инструкции (глобальные функции)
