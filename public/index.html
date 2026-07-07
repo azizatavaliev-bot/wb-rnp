@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="shortcut icon" href="/favicon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260707">
+<link rel="stylesheet" href="style.css?v=20260708">
 </head>
 <body>
 <div class="top">
@@ -779,7 +779,7 @@ document.addEventListener('click', e => {
     </div>
     <div class="day-sku-actions">
       <button class="btn ghost sm" onclick="App.downloadTemplate()" title="Скачать шаблон CSV">📋 Шаблон</button>
-      <button class="btn sm" onclick="$('dayFileInput').click()" title="Загрузить Excel/CSV">📂 Файл</button>
+      <button class="btn sm" onclick="document.getElementById('dayFileInput').click()" title="Загрузить Excel/CSV">📂 Файл</button>
       <input type="file" id="dayFileInput" accept=".csv,.xlsx,.xls" style="display:none" onchange="App.handleCsvFile(this)">
     </div>
   </div>
@@ -988,6 +988,6 @@ document.addEventListener('click', e => {
 </div>
 
 <div class="toast" id="toast"></div>
-<script src="app.js?v=20260707"></script>
+<script src="app.js?v=20260708"></script>
 </body>
 </html>
