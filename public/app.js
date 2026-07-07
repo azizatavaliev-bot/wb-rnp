@@ -1568,8 +1568,8 @@ const App = (() => {
   }
 
   // ---- CSV template & import ----
-  const CSV_COLS = ['date','sku','ordQ','ordS','buyQ','buyS','stock','shows','clicks','cart','adsShows','adsClicks','adsSpend','spp','giveaway','returnQ','storageCost'];
-  const CSV_LABELS = ['Дата (ГГГГ-ММ-ДД)','SKU товара','Заказы шт','Заказы руб','Продажи шт','Продажи руб','Остаток шт','Показы','Клики','Корзина шт','Показы РК','Клики РК','Расход РК руб','СПП %','Раздачи шт','Возвраты шт','Хранение руб'];
+  const CSV_COLS = ['date','sku','ordQ','ordS','buyQ','buyS','stock','shows','clicks','cart','adsShows','adsClicks','adsSpend','adsOrdQ','adsCart','spp','giveaway','returnQ','storageCost'];
+  const CSV_LABELS = ['Дата (ГГГГ-ММ-ДД)','SKU товара','Заказы шт','Заказы руб','Продажи шт','Продажи руб','Остаток шт','Показы','Клики','Корзина шт','Показы РК','Клики РК','Расход РК руб','Заказов с РК','Корзин с РК','СПП %','Раздачи шт','Возвраты шт','Хранение руб'];
 
   function downloadTemplate() {
     const today = new Date().toISOString().slice(0,10);
@@ -1590,11 +1590,11 @@ const App = (() => {
           ordQ, Math.round(ordQ * price * 0.9),
           buyQ, Math.round(buyQ * price * 0.88),
           100, 12000, 150, 40,
-          5000, 60, 800, 13, 0, 0, Math.round(100 * 1.2)
+          5000, 60, 800, 1, 15, 13, 0, 0, Math.round(100 * 1.2)
         ].join(','));
       });
     } else {
-      rows.push(`${today},Мой-SKU,4,3600,3,2700,100,12000,150,40,5000,60,800,13,0,0,120`);
+      rows.push(`${today},Мой-SKU,4,3600,3,2700,100,12000,150,40,5000,60,800,1,15,13,0,0,120`);
     }
     const blob = new Blob(['﻿' + rows.join('\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -1618,9 +1618,9 @@ const App = (() => {
         d.stock||0, d.shows||0,
         d.clicks||0, d.cart||0,
         d.adsShows||0, d.adsClicks||0,
-        d.adsSpend||0,
+        d.adsSpend||0, d.adsOrdQ||0, d.adsCart||0,
         (d.spp||0).toFixed(2),
-        d.giveaway||0
+        d.giveaway||0, d.returnQ||0, d.storageCost||0
       ].join(','));
     }
     const fname = mode === 'month' ? `rnp-данные-${ym}.csv` : 'rnp-все-данные.csv';
@@ -1661,7 +1661,7 @@ const App = (() => {
         const date = get('date'); const sku = get('sku');
         if (!date || !sku) { skipped++; continue; }
         const id = 'imp' + date + sku;
-        const rec = { id, date, sku, ordQ:num('ordQ'), ordS:num('ordS'), buyQ:num('buyQ'), buyS:num('buyS'), stock:num('stock'), shows:num('shows'), clicks:num('clicks'), cart:num('cart'), adsShows:num('adsShows'), adsClicks:num('adsClicks'), adsSpend:num('adsSpend'), spp:num('spp'), giveaway:num('giveaway'), returnQ:num('returnQ'), storageCost:num('storageCost'), source:'import' };
+        const rec = { id, date, sku, ordQ:num('ordQ'), ordS:num('ordS'), buyQ:num('buyQ'), buyS:num('buyS'), stock:num('stock'), shows:num('shows'), clicks:num('clicks'), cart:num('cart'), adsShows:num('adsShows'), adsClicks:num('adsClicks'), adsSpend:num('adsSpend'), adsOrdQ:num('adsOrdQ'), adsCart:num('adsCart'), spp:num('spp'), giveaway:num('giveaway'), returnQ:num('returnQ'), storageCost:num('storageCost'), source:'import' };
         const existing = db.days.findIndex(d => d.id === id);
         const isNew = existing < 0;
         if (isNew) { db.days.push(rec); added++; } else { db.days[existing] = rec; updated++; }
@@ -1715,7 +1715,7 @@ const App = (() => {
   }
 
   window.addEventListener('DOMContentLoaded', init);
-  return {render,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,fetchFxRates,wbTest,wbSync,wbImportCards,theme,calcTestPrice,downloadTemplate,exportData,importCsv,handleCsvFile,downloadCostTemplate,importCosts,handleCostFile,shiftMonth,archiveMonth,toggleHidden,setAllVisibility,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory,openMonthPlan,saveMonthPlan,renderDayCal,dayCalShift,dayCalPick,openCabinetModal,createCabinet,switchCabinet,renameCabinet,deleteCabinet,showDayChoice,showDayUpload,showDayManual};
+  return {render,renderProducts,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,fetchFxRates,wbTest,wbSync,wbImportCards,theme,calcTestPrice,downloadTemplate,exportData,importCsv,handleCsvFile,downloadCostTemplate,importCosts,handleCostFile,shiftMonth,archiveMonth,toggleHidden,setAllVisibility,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory,openMonthPlan,saveMonthPlan,renderDayCal,dayCalShift,dayCalPick,openCabinetModal,createCabinet,switchCabinet,renameCabinet,deleteCabinet,showDayChoice,showDayUpload,showDayManual};
 })();
 
 // Аккордеон инструкции (глобальные функции)
