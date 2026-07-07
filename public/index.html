@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="shortcut icon" href="/favicon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260709">
+<link rel="stylesheet" href="style.css?v=20260710">
 </head>
 <body>
 <div class="top">
@@ -801,6 +801,19 @@ document.addEventListener('click', e => {
     </div>
   </div>
 
+  <!-- ЭКРАН 4: результат импорта -->
+  <div class="day-result-screen" id="dayResultScreen" style="display:none">
+    <div class="day-result-stats" id="dayResultStats"></div>
+    <div class="day-result-list-wrap">
+      <div class="day-result-list-hd">Что именно загрузилось</div>
+      <div class="day-result-list" id="dayResultList"></div>
+    </div>
+    <div class="day-result-actions">
+      <button class="btn ghost" onclick="App.showDayUpload()">📂 Загрузить ещё файл</button>
+      <button class="btn" onclick="App.close('mDay')">Готово</button>
+    </div>
+  </div>
+
   <!-- ЭКРАН 3: ручной ввод -->
   <div class="day-manual-screen" id="dayManualScreen" style="display:none">
     <button class="day-back-btn" id="dayManualBackBtn" onclick="App.showDayChoice()">‹ Назад к выбору</button>
@@ -1012,6 +1025,6 @@ document.addEventListener('click', e => {
 </div>
 
 <div class="toast" id="toast"></div>
-<script src="app.js?v=20260709"></script>
+<script src="app.js?v=20260710"></script>
 </body>
 </html>

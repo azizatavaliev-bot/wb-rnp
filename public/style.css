@@ -649,6 +649,39 @@ input:focus, select:focus { outline: 2px solid var(--acc); outline-offset: 1px; 
 .day-dropzone-sub { font-size: 12px; color: var(--muted); }
 .day-upload-actions { display: flex; justify-content: center; margin-top: 16px; }
 
+/* ЭКРАН 4: результат импорта */
+.day-result-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 16px; }
+.day-result-stat {
+  border-radius: 12px; padding: 14px 12px; text-align: center;
+  border: 1.5px solid var(--line); background: var(--bg2);
+}
+.day-result-stat.ok { border-color: #66bb6a; background: rgba(76,175,80,.08); }
+.day-result-stat.upd { border-color: #1a73e8; background: rgba(26,115,232,.08); }
+.day-result-stat.skip { border-color: #ef9a9a; background: rgba(244,67,54,.06); }
+.day-result-stat-num { font-size: 24px; font-weight: 800; color: var(--ink); }
+.day-result-stat-lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.day-result-list-wrap { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
+.day-result-list-hd {
+  background: var(--bg2); padding: 8px 14px; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .3px; color: var(--muted); border-bottom: 1px solid var(--line);
+}
+.day-result-list { max-height: 260px; overflow-y: auto; }
+.day-result-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  font-size: 12px; border-bottom: 1px solid var(--line);
+}
+.day-result-row:last-child { border-bottom: none; }
+.day-result-row-badge {
+  font-size: 9px; font-weight: 800; padding: 2px 7px; border-radius: 10px; flex-shrink: 0; color: #fff;
+}
+.day-result-row-badge.new { background: #43a047; }
+.day-result-row-badge.upd { background: #1a73e8; }
+.day-result-row-date { font-weight: 700; color: var(--ink); flex-shrink: 0; width: 78px; }
+.day-result-row-sku { flex: 1; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.day-result-row-meta { color: var(--muted); font-size: 11px; flex-shrink: 0; }
+.day-result-more { padding: 8px 14px; font-size: 11px; color: var(--muted); text-align: center; }
+.day-result-actions { display: flex; justify-content: flex-end; gap: 10px; }
+
 /* Visual Calendar — минималистичный компактный виджет */
 .day-cal-section {
   background: var(--bg2); border: 1px solid var(--line);

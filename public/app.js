@@ -1164,18 +1164,21 @@ const App = (() => {
     $('dayChoiceScreen').style.display = '';
     $('dayUploadScreen').style.display = 'none';
     $('dayManualScreen').style.display = 'none';
+    $('dayResultScreen').style.display = 'none';
     $('dayModalSub').textContent = 'Как хочешь внести данные?';
   }
   function showDayUpload() {
     $('dayChoiceScreen').style.display = 'none';
     $('dayUploadScreen').style.display = '';
     $('dayManualScreen').style.display = 'none';
+    $('dayResultScreen').style.display = 'none';
     $('dayModalSub').textContent = 'Загрузи Excel/CSV — данные добавятся сразу за все дни и товары из файла';
   }
   function showDayManual() {
     $('dayChoiceScreen').style.display = 'none';
     $('dayUploadScreen').style.display = 'none';
     $('dayManualScreen').style.display = '';
+    $('dayResultScreen').style.display = 'none';
     $('dayModalSub').textContent = 'Кликни по дате в календаре → заполни показатели → сохрани';
     renderDayCal();
   }
@@ -1648,26 +1651,52 @@ const App = (() => {
       CSV_COLS.forEach(c => { idx[c] = idxOf(c); });
       if (idx.date < 0 || idx.sku < 0) return toast('Нет колонок date/sku в CSV');
 
-      let added = 0, updated = 0;
+      let added = 0, updated = 0, skipped = 0;
+      const rows = []; // для экрана результата: {date, sku, name, ordQ, buyQ, isNew}
+      const prodByS = new Map(db.products.map(p => [p.sku, p]));
       for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(',');
         const get = key => { const v = cols[idx[key]]; return v !== undefined ? v.trim() : ''; };
         const num = key => { const v = parseFloat(get(key).replace(',','.')); return isNaN(v) ? 0 : v; };
         const date = get('date'); const sku = get('sku');
-        if (!date || !sku) continue;
+        if (!date || !sku) { skipped++; continue; }
         const id = 'imp' + date + sku;
         const rec = { id, date, sku, ordQ:num('ordQ'), ordS:num('ordS'), buyQ:num('buyQ'), buyS:num('buyS'), stock:num('stock'), shows:num('shows'), clicks:num('clicks'), cart:num('cart'), adsShows:num('adsShows'), adsClicks:num('adsClicks'), adsSpend:num('adsSpend'), spp:num('spp'), giveaway:num('giveaway'), returnQ:num('returnQ'), storageCost:num('storageCost'), source:'import' };
         const existing = db.days.findIndex(d => d.id === id);
-        if (existing >= 0) { db.days[existing] = rec; updated++; } else { db.days.push(rec); added++; }
+        const isNew = existing < 0;
+        if (isNew) { db.days.push(rec); added++; } else { db.days[existing] = rec; updated++; }
+        rows.push({ date, sku, name: prodByS.get(sku)?.name || sku, ordQ: rec.ordQ, buyQ: rec.buyQ, isNew });
       }
       save().then(() => {
         render();
-        toast(`✅ Импорт: +${added} новых, ${updated} обновлено`);
-        close('mDay'); // закрываем модал дня если открыт
+        rows.sort((a,b) => a.date < b.date ? 1 : -1);
+        showDayResult(added, updated, skipped, rows);
       }).catch(e => toast('Ошибка сохранения: ' + e.message));
       input.value = '';
     };
     reader.readAsText(file, 'utf-8');
+  }
+  function showDayResult(added, updated, skipped, rows) {
+    $('dayChoiceScreen').style.display = 'none';
+    $('dayUploadScreen').style.display = 'none';
+    $('dayManualScreen').style.display = 'none';
+    $('dayResultScreen').style.display = '';
+    $('dayModalSub').textContent = 'Готово — вот что загрузилось из файла';
+    $('dayResultStats').innerHTML = `
+      <div class="day-result-stat ok"><div class="day-result-stat-num">${added}</div><div class="day-result-stat-lbl">✅ Новых дней добавлено</div></div>
+      <div class="day-result-stat upd"><div class="day-result-stat-num">${updated}</div><div class="day-result-stat-lbl">🔄 Обновлено (уже были)</div></div>
+      <div class="day-result-stat skip"><div class="day-result-stat-num">${skipped}</div><div class="day-result-stat-lbl">⚠️ Пропущено строк</div></div>`;
+    const shown = rows.slice(0, 100);
+    $('dayResultList').innerHTML = shown.map(r => `
+      <div class="day-result-row">
+        <span class="day-result-row-badge ${r.isNew?'new':'upd'}">${r.isNew?'НОВОЕ':'ОБНОВЛЕНО'}</span>
+        <span class="day-result-row-date">${r.date}</span>
+        <span class="day-result-row-sku">${esc(r.name)}</span>
+        <span class="day-result-row-meta">заказы ${fmt(r.ordQ)} · выкупы ${fmt(r.buyQ)}</span>
+      </div>`).join('') || '<div class="day-result-more">Нет строк для отображения</div>';
+    if (rows.length > shown.length) {
+      $('dayResultList').innerHTML += `<div class="day-result-more">…и ещё ${rows.length - shown.length} строк</div>`;
+    }
   }
 
   function switchTo(tab) {
