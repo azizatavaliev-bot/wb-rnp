@@ -1548,21 +1548,12 @@ const App = (() => {
     _setMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
   }
 
-  function toggleMonthPicker(e) {
-    e.stopPropagation();
-    const p = $('monthPicker');
-    if (p.style.display === 'none') {
-      const [y] = curMonth().split('-').map(Number);
-      _mpYear = y;
-      _renderMpGrid();
-      p.style.display = 'block';
-      setTimeout(() => document.addEventListener('click', _mpClose, {once:true}), 0);
-    } else {
-      p.style.display = 'none';
-    }
+  function toggleMonthPicker() {
+    const [y] = curMonth().split('-').map(Number);
+    _mpYear = y;
+    _renderMpGrid();
+    $('mMonthPicker').classList.add('open');
   }
-
-  function _mpClose() { $('monthPicker').style.display = 'none'; }
 
   function mpShiftYear(d) {
     _mpYear += d;
@@ -1578,12 +1569,13 @@ const App = (() => {
       const ym = `${_mpYear}-${String(i+1).padStart(2,'0')}`;
       const has = hasData.has(ym);
       const active = ym === cur;
-      return `<button class="mp-mo${active?' mp-cur':''}${has?' mp-has':''}" onclick="App._pickMonth('${ym}')">${name}</button>`;
+      const cls = 'mp-modal-card' + (active?' active':'') + (has?' has-data':'');
+      return `<button class="${cls}" onclick="App._pickMonth('${ym}')">${name}${active?'<span class="mp-modal-check">✓</span>':''}</button>`;
     }).join('');
   }
 
   function _pickMonth(ym) {
-    $('monthPicker').style.display = 'none';
+    close('mMonthPicker');
     _setMonth(ym);
   }
 

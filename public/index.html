@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="shortcut icon" href="/favicon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260717">
+<link rel="stylesheet" href="style.css?v=20260718">
 </head>
 <body>
 <div class="top">
@@ -34,19 +34,11 @@
   <div class="top-center">
     <div class="month-nav">
       <button class="mnav-btn" onclick="App.shiftMonth(-1)" title="Предыдущий месяц">‹</button>
-      <button class="month-btn" id="monthBtn" onclick="App.toggleMonthPicker(event)" title="Выбрать месяц">
+      <button class="month-btn" id="monthBtn" onclick="App.toggleMonthPicker()" title="Выбрать месяц">
         <span id="monthLabel">июнь 2026 г.</span>
       </button>
       <input type="hidden" id="month">
       <button class="mnav-btn" onclick="App.shiftMonth(1)" title="Следующий месяц">›</button>
-    </div>
-    <div class="month-picker" id="monthPicker" style="display:none">
-      <div class="mp-year">
-        <button onclick="App.mpShiftYear(-1)">‹</button>
-        <span id="mpYear">2026</span>
-        <button onclick="App.mpShiftYear(1)">›</button>
-      </div>
-      <div class="mp-grid" id="mpGrid"></div>
     </div>
   </div>
 
@@ -1020,6 +1012,25 @@ document.addEventListener('click', e => {
   </div>
 </div></div>
 
+<!-- MODAL: выбор месяца -->
+<div class="modal" id="mMonthPicker"><div class="sheet" style="max-width:440px">
+  <button class="modal-close" onclick="App.close('mMonthPicker')">✕</button>
+  <h2 style="margin:0 0 6px">📅 Выбрать месяц</h2>
+  <p style="font-size:12px;color:var(--muted);margin:0 0 18px">Кликни на месяц — сразу переключишься на него. Зелёным — месяцы, где уже есть данные.</p>
+
+  <div class="mp-modal-year-nav">
+    <button class="day-cal-nav-btn" onclick="App.mpShiftYear(-1)">‹</button>
+    <span class="mp-modal-year-lbl" id="mpYear">2026</span>
+    <button class="day-cal-nav-btn" onclick="App.mpShiftYear(1)">›</button>
+  </div>
+  <div class="mp-modal-grid" id="mpGrid"></div>
+
+  <div class="mp-modal-legend">
+    <span><span class="mp-modal-leg mp-has"></span> Есть данные</span>
+    <span><span class="mp-modal-leg mp-cur"></span> Текущий</span>
+  </div>
+</div></div>
+
 <!-- ТАБЫ ВНИЗУ как в Google Sheets -->
 <div class="sheet-tabs" id="sheetTabs">
   <button class="sheet-tab active" data-p="rnp">📊 Сводная</button>
@@ -1031,6 +1042,6 @@ document.addEventListener('click', e => {
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="app.js?v=20260717"></script>
+<script src="app.js?v=20260718"></script>
 </body>
 </html>
