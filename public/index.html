@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="shortcut icon" href="/favicon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260715">
+<link rel="stylesheet" href="style.css?v=20260716">
 </head>
 <body>
 <div class="top">
@@ -823,29 +823,34 @@ document.addEventListener('click', e => {
       <select id="daySku" onchange="App.renderDayCal()"><option value="">— выбери товар —</option></select>
     </div>
 
-    <!-- Visual Calendar -->
-    <div class="day-cal-section">
-      <div class="day-cal-nav">
-        <button class="day-cal-nav-btn" onclick="App.dayCalShift(-1)">‹</button>
-        <span class="day-cal-month-lbl" id="dayCalMonthLabel">—</span>
-        <button class="day-cal-nav-btn" onclick="App.dayCalShift(1)">›</button>
+    <!-- Календарь + карточка выбранной даты — в одну строку -->
+    <div class="day-cal-row">
+      <div class="day-cal-section">
+        <div class="day-cal-nav">
+          <button class="day-cal-nav-btn" onclick="App.dayCalShift(-1)">‹</button>
+          <span class="day-cal-month-lbl" id="dayCalMonthLabel">—</span>
+          <button class="day-cal-nav-btn" onclick="App.dayCalShift(1)">›</button>
+        </div>
+        <div class="day-cal-dows">
+          <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
+        </div>
+        <div class="day-cal-grid" id="dayCalGrid"></div>
+        <div class="day-cal-legend">
+          <span><span class="day-cal-leg c-has"></span> Есть данные</span>
+          <span><span class="day-cal-leg c-miss"></span> Нет данных</span>
+          <span><span class="day-cal-leg c-today"></span> Сегодня</span>
+        </div>
       </div>
-      <div class="day-cal-dows">
-        <span>Пн</span><span>Вт</span><span>Ср</span><span>Чт</span><span>Пт</span><span>Сб</span><span>Вс</span>
-      </div>
-      <div class="day-cal-grid" id="dayCalGrid"></div>
-      <div class="day-cal-legend">
-        <span><span class="day-cal-leg c-has"></span> Есть данные</span>
-        <span><span class="day-cal-leg c-miss"></span> Нет данных</span>
-        <span><span class="day-cal-leg c-today"></span> Сегодня</span>
-      </div>
-    </div>
 
-    <!-- Selected date bar -->
-    <div class="day-sel-bar" id="daySelBar">
-      <span class="day-sel-icon">📅</span>
-      <span id="daySelLabel" class="day-sel-label">Выбери дату в календаре</span>
-      <input type="date" id="dayDate" class="day-date-input">
+      <div class="day-sel-card" id="daySelBar">
+        <div class="day-sel-icon">📅</div>
+        <div class="day-sel-caption">Выбранная дата</div>
+        <div id="daySelLabel" class="day-sel-label">Выбери дату в календаре</div>
+        <label class="day-sel-alt">
+          <span>или введи вручную</span>
+          <input type="date" id="dayDate" class="day-date-input">
+        </label>
+      </div>
     </div>
 
     <div class="day-divider"><span>данные за выбранный день</span></div>
@@ -1026,6 +1031,6 @@ document.addEventListener('click', e => {
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="app.js?v=20260715"></script>
+<script src="app.js?v=20260716"></script>
 </body>
 </html>
