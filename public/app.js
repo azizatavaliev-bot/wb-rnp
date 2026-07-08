@@ -1665,6 +1665,72 @@ const App = (() => {
 
   function importCsv() { $('csvFileInput').click(); }
 
+  // ---- Официальный отчёт WB «Детализация» (построчный, не по датам/SKU) ----
+  // Колонки: Артикул поставщика, Дата продажи, Обоснование для оплаты (Продажа/Возврат/Логистика/Хранение/Удержание), Кол-во, К перечислению...
+  const WB_DETAIL_H = {
+    sku: 'Артикул поставщика', name: 'Название', date: 'Дата продажи',
+    reason: 'Обоснование для оплаты', qty: 'Кол-во',
+    payout: 'К перечислению Продавцу за реализованный Товар'
+  };
+  function _isWbDetailReport(header) {
+    const has = label => header.some(h => String(h).trim() === label);
+    return has(WB_DETAIL_H.sku) && has(WB_DETAIL_H.date) && has(WB_DETAIL_H.reason);
+  }
+  function _parseWbDetailReport(fileRows) {
+    const header = fileRows[0];
+    const idxOf = label => header.findIndex(h => String(h).trim() === label);
+    const idx = {
+      sku: idxOf(WB_DETAIL_H.sku), name: idxOf(WB_DETAIL_H.name),
+      date: idxOf(WB_DETAIL_H.date), reason: idxOf(WB_DETAIL_H.reason),
+      qty: idxOf(WB_DETAIL_H.qty), payout: idxOf(WB_DETAIL_H.payout)
+    };
+    const byKey = new Map(); // "date|sku" -> {date, sku, name, buyQ, buyS, returnQ}
+    let skippedNoSku = 0;
+    for (let i = 1; i < fileRows.length; i++) {
+      const row = fileRows[i];
+      const sku = String(row[idx.sku] || '').trim();
+      const date = String(row[idx.date] || '').trim();
+      const reason = String(row[idx.reason] || '').trim();
+      const qty = parseFloat(row[idx.qty]) || 0;
+      const payout = parseFloat(row[idx.payout]) || 0;
+      if (!date) continue;
+      if (!sku) { skippedNoSku++; continue; } // Хранение/Удержание — общие по кабинету, не привязаны к товару
+      const key = date + '|' + sku;
+      if (!byKey.has(key)) byKey.set(key, { date, sku, name: String(row[idx.name]||sku).trim(), buyQ:0, buyS:0, returnQ:0 });
+      const rec = byKey.get(key);
+      if (reason === 'Продажа') { rec.buyQ += qty; rec.buyS += payout; }
+      else if (reason === 'Возврат') { rec.returnQ += qty; }
+    }
+    return { byKey, skippedNoSku };
+  }
+  async function _handleWbDetailReport(fileRows) {
+    const { byKey, skippedNoSku } = _parseWbDetailReport(fileRows);
+    let added = 0, updated = 0;
+    const rows = [];
+    const prodByS = new Map(db.products.map(p => [p.sku, p]));
+    let skippedEmpty = 0;
+    byKey.forEach(agg => {
+      const id = 'imp' + agg.date + agg.sku;
+      const existing = db.days.findIndex(d => d.id === id);
+      const isNew = existing < 0;
+      if (isNew && agg.buyQ === 0 && agg.buyS === 0 && agg.returnQ === 0) { skippedEmpty++; return; } // logистика без факта продажи/возврата в этот день — нечего писать
+      if (isNew) {
+        db.days.push({ id, date:agg.date, sku:agg.sku, ordQ:0, ordS:0, buyQ:agg.buyQ, buyS:Math.round(agg.buyS), stock:0, shows:0, clicks:0, cart:0, adsShows:0, adsClicks:0, adsSpend:0, adsOrdQ:0, adsCart:0, spp:0, giveaway:0, returnQ:agg.returnQ, storageCost:0, source:'import' });
+        added++;
+      } else {
+        // Мержим только то, что реально знаем из этого отчёта — остальные поля (заказы, показы, реклама) не трогаем
+        const d = db.days[existing];
+        d.buyQ = agg.buyQ; d.buyS = Math.round(agg.buyS); d.returnQ = agg.returnQ;
+        updated++;
+      }
+      rows.push({ date: agg.date, sku: agg.sku, name: prodByS.get(agg.sku)?.name || agg.name, ordQ: 0, buyQ: agg.buyQ, isNew });
+    });
+    await save();
+    render();
+    rows.sort((a,b) => a.date < b.date ? 1 : -1);
+    showDayResult(added, updated, skippedNoSku + skippedEmpty, rows);
+  }
+
   async function handleCsvFile(input) {
     const file = input.files[0]; if (!file) return;
     let fileRows;
@@ -1673,6 +1739,13 @@ const App = (() => {
     if (fileRows.length < 2) { toast('Файл пустой или неверный формат'); input.value=''; return; }
     // определяем заголовок
     const header = fileRows[0];
+    // Официальный отчёт WB «Детализация» — свой формат, свой парсер
+    if (_isWbDetailReport(header)) {
+      try { await _handleWbDetailReport(fileRows); }
+      catch (e) { toast('Ошибка сохранения: ' + e.message); }
+      input.value = '';
+      return;
+    }
     // поддерживаем и английские ключи (date,sku,...) и русские метки из шаблона
     const idxOf = key => {
       const engIdx = header.findIndex(h => String(h).toLowerCase() === key.toLowerCase());
