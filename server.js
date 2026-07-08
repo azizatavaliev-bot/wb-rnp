@@ -106,25 +106,45 @@ function sendGzip(req, res, code, data, contentType) {
   }
 }
 
-// ---- Static file cache (ETag) ----
-const staticCache = new Map(); // filepath → { etag, data }
+// ---- Static file cache (ETag + gzip, сжимаем один раз и кэшируем) ----
+const staticCache = new Map(); // filepath → { etag, data, gz }
+const COMPRESSIBLE = new Set(['.html','.js','.css','.svg']);
 function serveStatic(req, res, fp, cacheSeconds) {
   fs.stat(fp, (err, stat) => {
     if (err) { res.writeHead(404, SEC_HEADERS); res.end('Not found'); return; }
     const etag = `"${stat.mtimeMs.toString(36)}-${stat.size}"`;
     if (req.headers['if-none-match'] === etag) { res.writeHead(304, SEC_HEADERS); res.end(); return; }
-    const ct = MIME[path.extname(fp)] || 'application/octet-stream';
+    const ext = path.extname(fp);
+    const ct = MIME[ext] || 'application/octet-stream';
     const cc = cacheSeconds ? `public, max-age=${cacheSeconds}` : 'no-store';
+    const acceptsGzip = (req.headers['accept-encoding'] || '').includes('gzip') && COMPRESSIBLE.has(ext);
+
+    const respond = entry => {
+      if (acceptsGzip && entry.gz) {
+        res.writeHead(200, { 'Content-Type':ct, 'Cache-Control':cc, 'ETag':etag, 'Content-Encoding':'gzip', 'Vary':'Accept-Encoding', ...SEC_HEADERS });
+        res.end(entry.gz);
+      } else {
+        res.writeHead(200, { 'Content-Type':ct, 'Cache-Control':cc, 'ETag':etag, ...SEC_HEADERS });
+        res.end(entry.data);
+      }
+    };
+
     const cached = staticCache.get(fp);
-    if (cached && cached.etag === etag) {
-      res.writeHead(200, { 'Content-Type':ct, 'Cache-Control':cc, 'ETag':etag, ...SEC_HEADERS });
-      res.end(cached.data); return;
-    }
+    if (cached && cached.etag === etag) { respond(cached); return; }
+
     fs.readFile(fp, (err2, data) => {
       if (err2) { res.writeHead(404, SEC_HEADERS); res.end('Not found'); return; }
-      staticCache.set(fp, { etag, data });
-      res.writeHead(200, { 'Content-Type':ct, 'Cache-Control':cc, 'ETag':etag, ...SEC_HEADERS });
-      res.end(data);
+      if (COMPRESSIBLE.has(ext) && data.length > 512) {
+        zlib.gzip(data, (gzErr, gz) => {
+          const entry = { etag, data, gz: gzErr ? null : gz };
+          staticCache.set(fp, entry);
+          respond(entry);
+        });
+      } else {
+        const entry = { etag, data, gz: null };
+        staticCache.set(fp, entry);
+        respond(entry);
+      }
     });
   });
 }

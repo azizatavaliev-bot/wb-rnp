@@ -10,6 +10,10 @@ const App = (() => {
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
   const curMonth = () => $('month').value || new Date().toISOString().slice(0, 7);
   const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  // Для значений, вставляемых внутрь одинарных кавычек в onclick="App.foo('${...}')":
+  // сначала экранируем для JS-строки (\ и '), потом esc() для самого HTML-атрибута.
+  const escJs = s => String(s || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  const escAttr = s => esc(escJs(s));
 
   // ---- file reading: CSV (текст) и настоящий Excel .xlsx/.xls (бинарник, через SheetJS) ----
   function _excelCellToStr(v) {
@@ -585,7 +589,7 @@ const App = (() => {
           <td colspan="2" class="ph-lbl">Цел.ДРР: <b>${fmt(p.planDrr||0)}%</b></td>
           <td colspan="2" class="ph-lbl">Арт. SKU: <b>${esc(p.sku)}</b></td>
           <td colspan="2" class="ph-lbl">Дней данных: <b>${cnt}</b></td>
-          <td colspan="4"><button class="ph-btn" onclick="App.openDay('${esc(p.sku)}')">＋ День</button>&nbsp;<button class="ph-btn" onclick="App.editProduct('${p.id}')">✏️ Товар</button></td>
+          <td colspan="4"><button class="ph-btn" onclick="App.openDay('${escAttr(p.sku)}')">＋ День</button>&nbsp;<button class="ph-btn" onclick="App.editProduct('${p.id}')">✏️ Товар</button></td>
         </tr>
       </tbody></table>
     ${p.sizes && p.sizes.length ? `
@@ -637,7 +641,7 @@ const App = (() => {
       if (dw === 0) clsArr.push('c-sun');
       const cls = clsArr.length ? ` class="${clsArr.join(' ')}"` : '';
       const missTitle = isPast && !hasData ? 'Нет данных за этот день' : date;
-      return `<th${cls} title="${missTitle}" onclick="App.openDayEdit('${p.sku}', '${date}')" style="cursor:pointer"><span class="th-dow">${dow}</span><br><span class="th-day">${String(d).padStart(2,'0')}</span><span class="th-mon">.${String(m).padStart(2,'0')}</span><span class="day-edit-btn">✎</span></th>`;
+      return `<th${cls} title="${missTitle}" onclick="App.openDayEdit('${escAttr(p.sku)}', '${date}')" style="cursor:pointer"><span class="th-dow">${dow}</span><br><span class="th-day">${String(d).padStart(2,'0')}</span><span class="th-mon">.${String(m).padStart(2,'0')}</span><span class="day-edit-btn">✎</span></th>`;
     }).join('');
     const colgroup = `<colgroup>
       <col style="width:148px"><col style="width:86px"><col style="width:80px">
@@ -853,11 +857,11 @@ const App = (() => {
       return `<tr>
         <td><b>${esc(p.name||p.sku)}</b></td>
         <td class="num"><input type="number" value="${pl.ordQty||''}" min="0" placeholder="0"
-          onchange="App.updPlan('${p.sku}','ordQty',+this.value);App.renderProducts()"></td>
+          onchange="App.updPlan('${escAttr(p.sku)}','ordQty',+this.value);App.renderProducts()"></td>
         <td class="num"><input type="number" value="${pl.ordRub||''}" min="0" placeholder="0"
-          onchange="App.updPlan('${p.sku}','ordRub',+this.value);App.renderProducts()"></td>
+          onchange="App.updPlan('${escAttr(p.sku)}','ordRub',+this.value);App.renderProducts()"></td>
         <td class="num"><input type="number" value="${pl.buyQty||''}" min="0" placeholder="0"
-          onchange="App.updPlan('${p.sku}','buyQty',+this.value);App.renderProducts()"></td>
+          onchange="App.updPlan('${escAttr(p.sku)}','buyQty',+this.value);App.renderProducts()"></td>
         <td class="num ${f.ordQ>0?'':''}"><b>${fmt(f.ordQ)}</b></td>
         <td class="num"><b>${fmt(f.ordS)}</b></td>
         <td class="num">${execStr(execOrdQ)}</td>
@@ -1392,8 +1396,8 @@ const App = (() => {
         </div>
         ${c.id===activeId?'<span class="cab-card-badge">Активен</span>':''}
         <div class="cab-card-actions">
-          <button class="cab-card-btn" onclick="event.stopPropagation();App.renameCabinet('${c.id}','${esc(c.name).replace(/'/g,"\\'")}')" title="Переименовать">✏️</button>
-          ${list.length>1?`<button class="cab-card-btn" onclick="event.stopPropagation();App.deleteCabinet('${c.id}','${esc(c.name).replace(/'/g,"\\'")}')" title="Удалить">🗑</button>`:''}
+          <button class="cab-card-btn" onclick="event.stopPropagation();App.renameCabinet('${c.id}','${escAttr(c.name)}')" title="Переименовать">✏️</button>
+          ${list.length>1?`<button class="cab-card-btn" onclick="event.stopPropagation();App.deleteCabinet('${c.id}','${escAttr(c.name)}')" title="Удалить">🗑</button>`:''}
         </div>
       </div>`).join('') || '<div style="padding:12px;font-size:12px;color:var(--muted)">Нет кабинетов</div>';
   }
