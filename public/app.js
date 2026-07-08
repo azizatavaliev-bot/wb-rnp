@@ -962,6 +962,16 @@ const App = (() => {
     if($('setPdEmail')) $('setPdEmail').textContent = $('topPdEmail')?.textContent||'—';
     $('logBox').innerHTML=(db.log||[]).slice(0,50).map(l=>`<div>${(l.t||'').slice(0,19)} · ${esc(l.msg)}</div>`).join('');
     renderVisibility();
+    _autoFetchFxOnSettingsOpen(); // подтягиваем актуальный курс сразу при открытии настроек, без клика
+  }
+  async function _autoFetchFxOnSettingsOpen() {
+    try {
+      const r = await (await fetch('/api/fx/rates')).json();
+      if (!r.ok) return;
+      const dateStr = r.date?.slice(0,10) || 'сегодня';
+      if (r.usd && $('usdRate')) { $('usdRate').value = r.usd; if($('usdRateHint')) $('usdRateHint').textContent = `ЦБ РФ на ${dateStr} — актуально`; }
+      if (r.kgs && $('kgsRate')) { $('kgsRate').value = r.kgs; if($('kgsRateHint')) $('kgsRateHint').textContent = `ЦБ РФ на ${dateStr} — актуально`; }
+    } catch {} // тихо — без тоста и без ошибок, это лишь фон-обновление подсказки
   }
 
   // ---- init ----

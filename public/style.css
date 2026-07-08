@@ -25,6 +25,7 @@ body.dark {
   --acc: #5a9ff5; --red: #f28b82; --green: #5cb85c; --orange: #fdd663;
   --hdr-bg: #2a2a2a; --hdr-ink: #e8e8e8;
   --sec-bg: #1a2a4a; --sec-ink: #7aaff4;
+  color-scheme: dark; /* браузер сам красит нативные виджеты (в т.ч. попап календаря input[type=date]) под тёмную тему */
 }
 
 html { font-size: 12px; }
