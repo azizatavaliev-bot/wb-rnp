@@ -11,6 +11,41 @@ const App = (() => {
   const curMonth = () => $('month').value || new Date().toISOString().slice(0, 7);
   const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
+  // ---- file reading: CSV (текст) и настоящий Excel .xlsx/.xls (бинарник, через SheetJS) ----
+  function _excelCellToStr(v) {
+    if (v instanceof Date) {
+      const y = v.getFullYear(), m = String(v.getMonth()+1).padStart(2,'0'), d = String(v.getDate()).padStart(2,'0');
+      return `${y}-${m}-${d}`;
+    }
+    return v === undefined || v === null ? '' : String(v).trim();
+  }
+  function readFileRows(file) {
+    return new Promise((resolve, reject) => {
+      const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
+      if (isExcel) {
+        reader.onload = e => {
+          try {
+            if (typeof XLSX === 'undefined') throw new Error('Библиотека чтения Excel не загрузилась — проверь интернет и обнови страницу');
+            const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+            const sheet = wb.Sheets[wb.SheetNames[0]];
+            const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+            resolve(raw.map(r => r.map(_excelCellToStr)));
+          } catch (err) { reject(new Error('Не удалось прочитать Excel-файл: ' + err.message)); }
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
+        reader.onload = e => {
+          const text = String(e.target.result).replace(/^﻿/, '');
+          const lines = text.split(/\r?\n/).filter(l => l.trim() && !l.startsWith('#'));
+          resolve(lines.map(l => l.split(',').map(c => c.replace(/^"|"$/g,'').trim())));
+        };
+        reader.readAsText(file, 'utf-8');
+      }
+    });
+  }
+
   // ---- data ----
   async function load() {
     try {
@@ -978,28 +1013,26 @@ const App = (() => {
 
   function importCosts() { $('costFileInput').click(); }
 
-  function handleCostFile(input) {
-    const file = input.files[0]; if(!file) return;
-    const reader = new FileReader();
-    reader.onload = async e => {
-      const lines = e.target.result.split(/\r?\n/).filter(l=>l.trim()&&!l.startsWith('#'));
-      if(lines.length<2) return toast('Файл пустой или неверный формат');
-      const hdr = lines[0].split(',').map(s=>s.trim().toLowerCase());
-      const idx = k => hdr.findIndex(h=>h.includes(k));
-      const iSku=idx('sku'); const iCost=idx('себес'); const iPrice=idx('цена'); const iComm=idx('комис'); const iLog=idx('логис'); const iPkg=idx('упако'); const iDrr=idx('дрр');
-      if(iSku<0) return toast('Нет колонки SKU в файле');
-      const rows=[];
-      for(let i=1;i<lines.length;i++){
-        const cols=lines[i].split(','); const get=j=>j>=0?(cols[j]||'').replace(/^"|"$/g,'').trim():'';
-        const sku=get(iSku); if(!sku) continue;
-        rows.push({sku, cost:get(iCost), price:get(iPrice), commission:get(iComm), logistics:get(iLog), pkg:get(iPkg), planDrr:get(iDrr)});
-      }
-      const r=await(await fetch('/api/import/costs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows})})).json();
-      toast((r.ok?'✅ ':'❌ ')+r.msg);
-      if(r.ok){await load();render();}
-      input.value='';
-    };
-    reader.readAsText(file,'utf-8');
+  async function handleCostFile(input) {
+    const file = input.files[0]; if (!file) return;
+    let fileRows;
+    try { fileRows = await readFileRows(file); }
+    catch (err) { toast('❌ ' + err.message); input.value=''; return; }
+    if (fileRows.length < 2) { toast('Файл пустой или неверный формат'); input.value=''; return; }
+    const hdr = fileRows[0].map(s => String(s).trim().toLowerCase());
+    const idx = k => hdr.findIndex(h=>h.includes(k));
+    const iSku=idx('sku'); const iCost=idx('себес'); const iPrice=idx('цена'); const iComm=idx('комис'); const iLog=idx('логис'); const iPkg=idx('упако'); const iDrr=idx('дрр');
+    if (iSku<0) { toast('Нет колонки SKU в файле'); input.value=''; return; }
+    const rows=[];
+    for (let i=1; i<fileRows.length; i++) {
+      const cols=fileRows[i]; const get=j=>j>=0?String(cols[j]??'').trim():'';
+      const sku=get(iSku); if(!sku) continue;
+      rows.push({sku, cost:get(iCost), price:get(iPrice), commission:get(iComm), logistics:get(iLog), pkg:get(iPkg), planDrr:get(iDrr)});
+    }
+    const r=await(await fetch('/api/import/costs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows})})).json();
+    toast((r.ok?'✅ ':'❌ ')+r.msg);
+    if(r.ok){await load();render();}
+    input.value='';
   }
 
   async function loadDemo() {
@@ -1632,49 +1665,48 @@ const App = (() => {
 
   function importCsv() { $('csvFileInput').click(); }
 
-  function handleCsvFile(input) {
+  async function handleCsvFile(input) {
     const file = input.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-      const lines = e.target.result.split(/\r?\n/).filter(l => l.trim() && !l.startsWith('#'));
-      if (lines.length < 2) return toast('CSV пустой или неверный формат');
-      // определяем заголовок
-      const header = lines[0].replace(/^﻿/, '').split(',').map(s => s.trim());
-      // поддерживаем и английские ключи (date,sku,...) и русские метки из шаблона
-      const idxOf = key => {
-        const engIdx = header.findIndex(h => h.toLowerCase() === key.toLowerCase());
-        if (engIdx >= 0) return engIdx;
-        const ruLabel = CSV_LABELS[CSV_COLS.indexOf(key)];
-        return ruLabel ? header.findIndex(h => h === ruLabel) : -1;
-      };
-      const idx = {};
-      CSV_COLS.forEach(c => { idx[c] = idxOf(c); });
-      if (idx.date < 0 || idx.sku < 0) return toast('Нет колонок date/sku в CSV');
-
-      let added = 0, updated = 0, skipped = 0;
-      const rows = []; // для экрана результата: {date, sku, name, ordQ, buyQ, isNew}
-      const prodByS = new Map(db.products.map(p => [p.sku, p]));
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(',');
-        const get = key => { const v = cols[idx[key]]; return v !== undefined ? v.trim() : ''; };
-        const num = key => { const v = parseFloat(get(key).replace(',','.')); return isNaN(v) ? 0 : v; };
-        const date = get('date'); const sku = get('sku');
-        if (!date || !sku) { skipped++; continue; }
-        const id = 'imp' + date + sku;
-        const rec = { id, date, sku, ordQ:num('ordQ'), ordS:num('ordS'), buyQ:num('buyQ'), buyS:num('buyS'), stock:num('stock'), shows:num('shows'), clicks:num('clicks'), cart:num('cart'), adsShows:num('adsShows'), adsClicks:num('adsClicks'), adsSpend:num('adsSpend'), adsOrdQ:num('adsOrdQ'), adsCart:num('adsCart'), spp:num('spp'), giveaway:num('giveaway'), returnQ:num('returnQ'), storageCost:num('storageCost'), source:'import' };
-        const existing = db.days.findIndex(d => d.id === id);
-        const isNew = existing < 0;
-        if (isNew) { db.days.push(rec); added++; } else { db.days[existing] = rec; updated++; }
-        rows.push({ date, sku, name: prodByS.get(sku)?.name || sku, ordQ: rec.ordQ, buyQ: rec.buyQ, isNew });
-      }
-      save().then(() => {
-        render();
-        rows.sort((a,b) => a.date < b.date ? 1 : -1);
-        showDayResult(added, updated, skipped, rows);
-      }).catch(e => toast('Ошибка сохранения: ' + e.message));
-      input.value = '';
+    let fileRows;
+    try { fileRows = await readFileRows(file); }
+    catch (err) { toast('❌ ' + err.message); input.value=''; return; }
+    if (fileRows.length < 2) { toast('Файл пустой или неверный формат'); input.value=''; return; }
+    // определяем заголовок
+    const header = fileRows[0];
+    // поддерживаем и английские ключи (date,sku,...) и русские метки из шаблона
+    const idxOf = key => {
+      const engIdx = header.findIndex(h => String(h).toLowerCase() === key.toLowerCase());
+      if (engIdx >= 0) return engIdx;
+      const ruLabel = CSV_LABELS[CSV_COLS.indexOf(key)];
+      return ruLabel ? header.findIndex(h => h === ruLabel) : -1;
     };
-    reader.readAsText(file, 'utf-8');
+    const idx = {};
+    CSV_COLS.forEach(c => { idx[c] = idxOf(c); });
+    if (idx.date < 0 || idx.sku < 0) { toast('Нет колонок «Дата» и «SKU товара» в файле — используй наш шаблон'); input.value=''; return; }
+
+    let added = 0, updated = 0, skipped = 0;
+    const rows = []; // для экрана результата: {date, sku, name, ordQ, buyQ, isNew}
+    const prodByS = new Map(db.products.map(p => [p.sku, p]));
+    for (let i = 1; i < fileRows.length; i++) {
+      const cols = fileRows[i];
+      const get = key => { const v = cols[idx[key]]; return v !== undefined ? String(v).trim() : ''; };
+      const num = key => { const v = parseFloat(get(key).replace(',','.')); return isNaN(v) ? 0 : v; };
+      const date = get('date'); const sku = get('sku');
+      if (!date || !sku) { skipped++; continue; }
+      const id = 'imp' + date + sku;
+      const rec = { id, date, sku, ordQ:num('ordQ'), ordS:num('ordS'), buyQ:num('buyQ'), buyS:num('buyS'), stock:num('stock'), shows:num('shows'), clicks:num('clicks'), cart:num('cart'), adsShows:num('adsShows'), adsClicks:num('adsClicks'), adsSpend:num('adsSpend'), adsOrdQ:num('adsOrdQ'), adsCart:num('adsCart'), spp:num('spp'), giveaway:num('giveaway'), returnQ:num('returnQ'), storageCost:num('storageCost'), source:'import' };
+      const existing = db.days.findIndex(d => d.id === id);
+      const isNew = existing < 0;
+      if (isNew) { db.days.push(rec); added++; } else { db.days[existing] = rec; updated++; }
+      rows.push({ date, sku, name: prodByS.get(sku)?.name || sku, ordQ: rec.ordQ, buyQ: rec.buyQ, isNew });
+    }
+    try {
+      await save();
+      render();
+      rows.sort((a,b) => a.date < b.date ? 1 : -1);
+      showDayResult(added, updated, skipped, rows);
+    } catch (e) { toast('Ошибка сохранения: ' + e.message); }
+    input.value = '';
   }
   function showDayResult(added, updated, skipped, rows) {
     $('dayChoiceScreen').style.display = 'none';
