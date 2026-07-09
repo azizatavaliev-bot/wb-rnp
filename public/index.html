@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="shortcut icon" href="/favicon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260718">
+<link rel="stylesheet" href="style.css?v=20260719">
 </head>
 <body>
 <div class="top">
@@ -27,6 +27,10 @@
       <span class="top-shop-name" id="topShopName">Мой магазин</span>
       <span class="pulse"></span>
       <span class="cabinet-chevron">▾</span>
+    </div>
+    <div class="viewing-as-badge" id="viewingAsBadge" style="display:none">
+      <span>👀 Смотришь как: <b id="viewingAsLabel"></b></span>
+      <button onclick="App.exitAdminView()">Выйти</button>
     </div>
   </div>
 
@@ -67,6 +71,7 @@
         </div>
         <div class="top-dd-sep"></div>
         <button onclick="App.switchTo('settings');toggleProfileMenu()">⚙️ Настройки</button>
+        <button id="topAdminLink" onclick="window.location.href='/admin'" style="display:none">🛡 Админ-панель</button>
         <div class="top-dd-sep"></div>
         <button onclick="App.logout()" class="top-pd-logout">⎋ Выйти</button>
       </div>
@@ -1042,6 +1047,6 @@ document.addEventListener('click', e => {
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="app.js?v=20260718"></script>
+<script src="app.js?v=20260719"></script>
 </body>
 </html>

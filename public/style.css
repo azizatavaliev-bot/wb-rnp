@@ -65,6 +65,19 @@ body { font-family: var(--font); background: var(--bg); color: var(--ink); min-h
 body.dark .top-shop { background: rgba(90,159,245,.1); border-color: rgba(90,159,245,.2); }
 .cabinet-chevron { font-size: 10px; color: var(--sec-ink); opacity: .7; flex-shrink: 0; }
 
+/* Баннер «Смотришь как» — когда супер-админ просматривает чужой аккаунт */
+.viewing-as-badge {
+  display: flex; align-items: center; gap: 10px;
+  background: linear-gradient(135deg, #ff9800, #f57c00); color: #fff;
+  border-radius: 8px; padding: 5px 12px; font-size: 12px; font-weight: 600;
+  flex-shrink: 0; white-space: nowrap;
+}
+.viewing-as-badge button {
+  background: rgba(255,255,255,.25); border: none; color: #fff; cursor: pointer;
+  border-radius: 6px; padding: 3px 10px; font-size: 11px; font-weight: 700; font-family: inherit;
+}
+.viewing-as-badge button:hover { background: rgba(255,255,255,.4); }
+
 /* Cabinet switcher — полноценное модальное окно */
 .cab-modal-list { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; margin-bottom: 16px; }
 .cab-card {

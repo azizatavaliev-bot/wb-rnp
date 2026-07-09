@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Админ-панель · RNP Fadamos</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=20260718">
+<style>
+body { padding: 24px; max-width: 980px; margin: 0 auto; }
+.admin-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+.admin-hd h1 { font-size: 20px; font-weight: 800; margin: 0; }
+.admin-hd p { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+.admin-hd-actions { display: flex; gap: 8px; }
+.admin-account { background: var(--bg2); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin-bottom: 14px; }
+.admin-account-hd { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.admin-account-avatar {
+  width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg,#1a73e8,#1557b0);
+  color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; flex-shrink: 0;
+}
+.admin-account-name { font-weight: 700; font-size: 14px; color: var(--ink); }
+.admin-account-email { font-size: 11px; color: var(--muted); }
+.admin-cab-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.admin-cab-card {
+  display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1.5px solid var(--line);
+  border-radius: 9px; padding: 8px 14px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--ink);
+  transition: all .12s;
+}
+.admin-cab-card:hover { border-color: var(--acc); background: rgba(26,115,232,.06); transform: translateY(-1px); }
+.admin-cab-card.active { border-color: var(--acc); background: rgba(26,115,232,.1); }
+.admin-cab-badge { font-size: 9px; font-weight: 800; color: var(--acc); }
+.admin-empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+.admin-noaccess { text-align: center; padding: 80px 20px; }
+</style>
+</head>
+<body>
+
+<div class="admin-hd">
+  <div>
+    <h1>🛡 Админ-панель</h1>
+    <p>Все кабинеты всех пользователей RNP Fadamos. Кликни на кабинет — попадёшь внутрь него как обычный пользователь.</p>
+  </div>
+  <div class="admin-hd-actions">
+    <button class="btn ghost" onclick="window.location.href='/'">🏠 Мой кабинет</button>
+    <button class="btn ghost" onclick="doLogout()">⎋ Выйти</button>
+  </div>
+</div>
+
+<div id="accountsList"><div class="admin-empty">⏳ Загружаю...</div></div>
+
+<script>
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+async function init() {
+  const me = await fetch('/api/auth/me').then(r => r.json()).catch(()=>null);
+  if (!me || !me.user) { window.location.href = '/login.html'; return; }
+  if (!me.user.isAdmin) {
+    document.getElementById('accountsList').innerHTML = '<div class="admin-noaccess"><h2>🔒 Нет доступа</h2><p style="color:var(--muted);margin-top:8px">Эта страница только для супер-админов.</p></div>';
+    return;
+  }
+  if (localStorage.getItem('theme') === 'dark') document.body.classList.add('dark');
+
+  const r = await fetch('/api/admin/accounts').then(r => r.json()).catch(()=>null);
+  if (!r || !r.accounts) { document.getElementById('accountsList').innerHTML = '<div class="admin-empty">Ошибка загрузки</div>'; return; }
+
+  document.getElementById('accountsList').innerHTML = r.accounts.map(acc => {
+    const letter = (acc.name || '?')[0].toUpperCase();
+    const cabs = (acc.cabinets || []).map(c => `
+      <div class="admin-cab-card${c.id===acc.activeId?' active':''}" onclick="viewCabinet('${acc.id}','${c.id}')">
+        🏪 ${esc(c.name)} ${c.id===acc.activeId?'<span class="admin-cab-badge">● активен</span>':''}
+      </div>`).join('');
+    return `
+      <div class="admin-account">
+        <div class="admin-account-hd">
+          <div class="admin-account-avatar">${letter}</div>
+          <div>
+            <div class="admin-account-name">${esc(acc.name)}</div>
+            <div class="admin-account-email">${esc(acc.email)}</div>
+          </div>
+        </div>
+        <div class="admin-cab-list">${cabs || '<span style="font-size:12px;color:var(--muted)">Нет кабинетов</span>'}</div>
+      </div>`;
+  }).join('') || '<div class="admin-empty">Нет зарегистрированных аккаунтов</div>';
+}
+
+async function viewCabinet(userId, cabinetId) {
+  const r = await fetch('/api/admin/view', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ userId }) }).then(r=>r.json());
+  if (!r.ok) { alert('Ошибка: ' + (r.msg||'не удалось переключиться')); return; }
+  await fetch('/api/cabinets/switch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: cabinetId }) });
+  window.location.href = '/';
+}
+
+async function doLogout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  window.location.href = '/login.html';
+}
+
+init();
+</script>
+</body>
+</html>

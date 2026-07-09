@@ -17,7 +17,10 @@ const ARC_DIR = path.join(DATA, 'archive');
 });
 
 // ---- Auth helpers ----
-const sessions = new Map(); // token → {userId, email, name, expires}
+// Супер-админы: видят и переключаются между кабинетами ВСЕХ пользователей системы.
+// Добавь сюда email — при следующем логине/старте сервера получит права админа.
+const ADMIN_EMAILS = ['demo@rnp.ru'];
+const sessions = new Map(); // token → {userId, email, name, expires, isAdmin, viewAsUserId}
 setInterval(() => { for (const [k, s] of sessions) if (s.expires < Date.now()) sessions.delete(k); }, 3600000);
 
 // ---- In-memory DB cache (ключевое ускорение) ----
@@ -324,7 +327,12 @@ function addLog(db, msg) {
 // ---- Init demo user ----
 function ensureDemoUser() {
   const users = loadUsers();
-  if (users.find(u => u.email === 'demo@rnp.ru')) return;
+  const existing = users.find(u => u.email === 'demo@rnp.ru');
+  if (existing) {
+    // Миграция: демо-аккаунт — единственный супер-админ по умолчанию (см. ADMIN_EMAILS)
+    if (!existing.isAdmin && ADMIN_EMAILS.includes(existing.email)) { existing.isAdmin = true; saveUsers(users); }
+    return;
+  }
   const salt = crypto.randomBytes(16).toString('hex');
   const user = {
     id: 'demo',
@@ -332,6 +340,7 @@ function ensureDemoUser() {
     name: 'Демо-магазин',
     passHash: hashPass('demo123', salt),
     salt,
+    isAdmin: ADMIN_EMAILS.includes('demo@rnp.ru'),
     createdAt: new Date().toISOString()
   };
   users.push(user);
@@ -466,12 +475,12 @@ const server = http.createServer(async (req, res) => {
     const users = loadUsers();
     if (users.find(u => u.email === email)) return send(res, 200, { ok:false, msg:'Email уже занят' });
     const salt = crypto.randomBytes(16).toString('hex');
-    const user = { id: genToken().slice(0,12), email, name, passHash: hashPass(password, salt), salt, createdAt: new Date().toISOString() };
+    const user = { id: genToken().slice(0,12), email, name, passHash: hashPass(password, salt), salt, isAdmin: ADMIN_EMAILS.includes(email), createdAt: new Date().toISOString() };
     users.push(user);
     saveUsers(users);
     // новый пользователь начинает с чистого листа (не seedUserDemo)
     const token = genToken();
-    sessions.set(token, { userId: user.id, email: user.email, name: user.name, expires: Date.now() + 30*24*3600*1000 });
+    sessions.set(token, { userId: user.id, email: user.email, name: user.name, isAdmin: !!user.isAdmin, expires: Date.now() + 30*24*3600*1000 });
     setCookie(res, token);
     return send(res, 200, { ok:true, token, user: { id:user.id, email:user.email, name:user.name } });
   }
@@ -483,7 +492,7 @@ const server = http.createServer(async (req, res) => {
     const user = users.find(u => u.email === email);
     if (!user || hashPass(password, user.salt) !== user.passHash) return send(res, 200, { ok:false, msg:'Неверный email или пароль' });
     const token = genToken();
-    sessions.set(token, { userId: user.id, email: user.email, name: user.name, expires: Date.now() + 30*24*3600*1000 });
+    sessions.set(token, { userId: user.id, email: user.email, name: user.name, isAdmin: !!user.isAdmin, expires: Date.now() + 30*24*3600*1000 });
     setCookie(res, token);
     return send(res, 200, { ok:true, token, user: { id:user.id, email:user.email, name:user.name } });
   }
@@ -499,7 +508,7 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/auth/me' && req.method === 'GET') {
     const sess = getSession(req);
     if (!sess) return send(res, 401, { error: 'unauthorized' });
-    return send(res, 200, { user: { id:sess.userId, email:sess.email, name:sess.name } });
+    return send(res, 200, { user: { id:sess.userId, email:sess.email, name:sess.name, isAdmin: !!sess.isAdmin } });
   }
 
   // ---- FX: актуальный курс USD и других валют (ЦБ РФ, публичный API, без ключа) ----
@@ -536,7 +545,7 @@ const server = http.createServer(async (req, res) => {
       users.push(user); saveUsers(users); seedUserDemo('demo');
     }
     const token = genToken();
-    sessions.set(token, { userId: user.id, email: user.email, name: user.name, expires: Date.now() + 30*24*3600*1000 });
+    sessions.set(token, { userId: user.id, email: user.email, name: user.name, isAdmin: !!user.isAdmin, expires: Date.now() + 30*24*3600*1000 });
     setCookie(res, token);
     return redirect(res, '/');
   }
@@ -553,14 +562,50 @@ const server = http.createServer(async (req, res) => {
     return serveStatic(req, res, path.join(PUB, 'index.html'), 0);
   }
 
+  // ---- Отдельная админ-страница: список ВСЕХ кабинетов всех пользователей ----
+  if (p === '/admin' || p === '/admin.html') {
+    const sess = getSession(req);
+    if (!sess) return redirect(res, '/login.html');
+    if (!sess.isAdmin) return redirect(res, '/');
+    return serveStatic(req, res, path.join(PUB, 'admin.html'), 0);
+  }
+
   // ---- Protected API endpoints ----
   if (p.startsWith('/api/')) {
     const sess = getSession(req);
     if (!sess) return send(res, 401, { error: 'unauthorized' });
-    const userId = sess.userId;
+    // Супер-админ мог зайти в /admin и выбрать чужой аккаунт для просмотра —
+    // тогда ВСЕ обычные эндпоинты (state/save/cabinets/...) работают с данными этого аккаунта.
+    const userId = sess.viewAsUserId || sess.userId;
     const meta = loadCabinetsMeta(userId);
 
     try {
+      // ---- Супер-админ: список всех аккаунтов + переключение просмотра ----
+      if (p === '/api/admin/accounts' && req.method === 'GET') {
+        if (!sess.isAdmin) return send(res, 403, { error: 'forbidden' });
+        const users = loadUsers();
+        const accounts = users.map(u => {
+          const m = loadCabinetsMeta(u.id);
+          return { id: u.id, name: u.name, email: u.email, cabinets: m.list, activeId: m.activeId };
+        });
+        return send(res, 200, { accounts });
+      }
+
+      if (p === '/api/admin/view' && req.method === 'POST') {
+        if (!sess.isAdmin) return send(res, 403, { error: 'forbidden' });
+        const b = await body(req);
+        const users = loadUsers();
+        const target = users.find(u => u.id === b.userId);
+        if (!target) return send(res, 200, { ok:false, msg:'Аккаунт не найден' });
+        sess.viewAsUserId = target.id;
+        return send(res, 200, { ok:true, viewingUserId: target.id, viewingName: target.name, viewingEmail: target.email });
+      }
+
+      if (p === '/api/admin/exit' && req.method === 'POST') {
+        delete sess.viewAsUserId;
+        return send(res, 200, { ok:true });
+      }
+
       // ---- Управление кабинетами (несколько магазинов WB в одном логине) ----
       if (p === '/api/cabinets' && req.method === 'GET') {
         return send(res, 200, { activeId: meta.activeId, list: meta.list });
@@ -616,7 +661,12 @@ const server = http.createServer(async (req, res) => {
       const db = loadUserDB(userId, cabinetId);
 
       if (p === '/api/state' && req.method === 'GET') {
-        return sendGzip(req, res, 200, { ...db, _cabinets: meta.list, _activeCabinetId: cabinetId });
+        let viewingAs = null;
+        if (sess.viewAsUserId) {
+          const target = loadUsers().find(u => u.id === sess.viewAsUserId);
+          if (target) viewingAs = { name: target.name, email: target.email };
+        }
+        return sendGzip(req, res, 200, { ...db, _cabinets: meta.list, _activeCabinetId: cabinetId, _isAdmin: !!sess.isAdmin, _viewingAs: viewingAs });
       }
 
       if (p === '/api/save' && req.method === 'POST') {

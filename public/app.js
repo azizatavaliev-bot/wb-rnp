@@ -988,6 +988,7 @@ const App = (() => {
       const ui = $('userInfo'); if(ui) ui.textContent = me.user.name;
       const pdName = $('topPdName'); if(pdName) pdName.textContent = me.user.name;
       const pdEmail = $('topPdEmail'); if(pdEmail) pdEmail.textContent = me.user.email || '';
+      if (me.user.isAdmin) { const al = $('topAdminLink'); if(al) al.style.display = ''; }
     } catch { window.location.href = '/login.html'; return; }
 
     // Дождаться загрузки данных чтобы получить shopName из настроек
@@ -995,6 +996,7 @@ const App = (() => {
 
     const shopName = db.settings?.shopName || meUser?.name || 'Мой магазин';
     const shopEl = $('topShopName'); if(shopEl) shopEl.textContent = shopName;
+    _renderViewingAsBadge();
 
     _setMonth(new Date().toISOString().slice(0,7));
     document.querySelectorAll('.sheet-tab').forEach(t => t.addEventListener('click', () => {
@@ -1014,6 +1016,20 @@ const App = (() => {
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
     window.location.href = '/login.html';
+  }
+
+  function _renderViewingAsBadge() {
+    const badge = $('viewingAsBadge'); if (!badge) return;
+    if (db._viewingAs) {
+      badge.style.display = '';
+      $('viewingAsLabel').textContent = `${db._viewingAs.name} (${db._viewingAs.email})`;
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+  async function exitAdminView() {
+    await fetch('/api/admin/exit', { method: 'POST' });
+    window.location.href = '/admin';
   }
 
   function downloadCostTemplate() {
@@ -1826,7 +1842,7 @@ const App = (() => {
   }
 
   window.addEventListener('DOMContentLoaded', init);
-  return {render,renderProducts,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,fetchFxRates,wbTest,wbSync,wbImportCards,theme,calcTestPrice,downloadTemplate,exportData,importCsv,handleCsvFile,downloadCostTemplate,importCosts,handleCostFile,shiftMonth,archiveMonth,toggleHidden,setAllVisibility,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory,openMonthPlan,saveMonthPlan,renderDayCal,dayCalShift,dayCalPick,openCabinetModal,createCabinet,switchCabinet,renameCabinet,deleteCabinet,showDayChoice,showDayUpload,showDayManual};
+  return {render,renderProducts,openDay,openDayEdit,saveDay,close,addProduct,saveNewProduct,editProduct,updProd,updPlan,delProduct,saveSettings,fetchFxRates,wbTest,wbSync,wbImportCards,theme,calcTestPrice,downloadTemplate,exportData,importCsv,handleCsvFile,downloadCostTemplate,importCosts,handleCostFile,shiftMonth,archiveMonth,toggleHidden,setAllVisibility,switchTo,logout,loadDemo,toggleMonthPicker,mpShiftYear,_pickMonth,buildCategoryTabs,filterByCategory,openMonthPlan,saveMonthPlan,renderDayCal,dayCalShift,dayCalPick,openCabinetModal,createCabinet,switchCabinet,renameCabinet,deleteCabinet,showDayChoice,showDayUpload,showDayManual,exitAdminView};
 })();
 
 // Аккордеон инструкции (глобальные функции)
