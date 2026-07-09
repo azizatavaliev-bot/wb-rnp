@@ -19,7 +19,7 @@ const ARC_DIR = path.join(DATA, 'archive');
 // ---- Auth helpers ----
 // Супер-админы: видят и переключаются между кабинетами ВСЕХ пользователей системы.
 // Добавь сюда email — при следующем логине/старте сервера получит права админа.
-const ADMIN_EMAILS = ['demo@rnp.ru'];
+const ADMIN_EMAILS = ['demo@rnp.ru', 'admin@rnpfadamos.com'];
 const sessions = new Map(); // token → {userId, email, name, expires, isAdmin, viewAsUserId}
 setInterval(() => { for (const [k, s] of sessions) if (s.expires < Date.now()) sessions.delete(k); }, 3600000);
 
