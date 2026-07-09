@@ -45,6 +45,8 @@ body{font-family:'Inter',sans-serif;min-height:100vh;display:flex;background:#f0
 .btn-main:hover{opacity:.9}
 .btn-demo{width:100%;padding:13px;border:2px solid #1a73e8;border-radius:10px;background:#fff;color:#1a73e8;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;transition:all .15s;margin-top:8px}
 .btn-demo:hover{background:#e8f0fe}
+.btn-admin{width:100%;padding:11px;border:1.5px dashed #f57c00;border-radius:10px;background:#fff8f0;color:#e65100;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;margin-top:8px}
+.btn-admin:hover{background:#ffe9d1}
 .divider{text-align:center;font-size:12px;color:#aaa;margin:6px 0;position:relative}
 .divider::before,.divider::after{content:'';position:absolute;top:50%;width:42%;height:1px;background:#e0e0e0}
 .divider::before{left:0}.divider::after{right:0}
@@ -102,6 +104,7 @@ body{font-family:'Inter',sans-serif;min-height:100vh;display:flex;background:#f0
     <button class="btn-main" onclick="doLogin()"><span id="lSpin" style="display:none" class="spinner"></span>Войти</button>
     <div class="divider">или</div>
     <button class="btn-demo" onclick="tryDemo()">▶ Попробовать демо</button>
+    <button class="btn-admin" onclick="doLogin(true)">🛡 Войти в админ-доступ</button>
   </form>
 
   <!-- Форма регистрации -->
@@ -129,10 +132,10 @@ function showErr(msg) {
 }
 function spin(id, on) { document.getElementById(id).style.display = on ? 'inline-block' : 'none'; }
 
-async function login(email, pass) {
+async function login(email, pass, goToAdmin) {
   const r = await fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email, password:pass}) });
   const d = await r.json();
-  if (d.ok) window.location.href = '/'; else showErr(d.msg || 'Ошибка входа');
+  if (d.ok) window.location.href = goToAdmin ? '/admin' : '/'; else showErr(d.msg || 'Ошибка входа');
 }
 async function register(name, email, pass) {
   const r = await fetch('/api/auth/register', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, email, password:pass}) });
@@ -142,13 +145,13 @@ async function register(name, email, pass) {
 async function tryDemo() {
   window.location.href = '/demo';
 }
-async function doLogin() {
+async function doLogin(goToAdmin) {
   showErr('');
   const email = document.getElementById('lEmail').value.trim();
   const pass  = document.getElementById('lPass').value;
   if (!email || !pass) { showErr('Введи email и пароль'); return; }
   spin('lSpin', true);
-  await login(email, pass);
+  await login(email, pass, goToAdmin);
   spin('lSpin', false);
 }
 async function doRegister() {
