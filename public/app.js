@@ -1693,7 +1693,10 @@ const App = (() => {
   const WB_DETAIL_H = {
     sku: 'Артикул поставщика', name: 'Название', date: 'Дата продажи',
     reason: 'Обоснование для оплаты', qty: 'Кол-во',
-    payout: 'К перечислению Продавцу за реализованный Товар'
+    payout: 'К перечислению Продавцу за реализованный Товар',
+    retail: 'Цена розничная с учетом согласованной скидки', // реальная сумма продажи (после согласованной скидки)
+    retailBase: 'Цена розничная',                            // fallback, если колонки выше нет
+    spp: 'Платформенные скидки, %'                            // СПП (скидка постоянного покупателя от WB)
   };
   function _isWbDetailReport(header) {
     const has = label => header.some(h => String(h).trim() === label);
@@ -1715,24 +1718,37 @@ const App = (() => {
     const idx = {
       sku: idxOf(WB_DETAIL_H.sku), name: idxOf(WB_DETAIL_H.name),
       date: idxOf(WB_DETAIL_H.date), reason: idxOf(WB_DETAIL_H.reason),
-      qty: idxOf(WB_DETAIL_H.qty), payout: idxOf(WB_DETAIL_H.payout)
+      qty: idxOf(WB_DETAIL_H.qty), payout: idxOf(WB_DETAIL_H.payout),
+      retail: idxOf(WB_DETAIL_H.retail), retailBase: idxOf(WB_DETAIL_H.retailBase),
+      spp: idxOf(WB_DETAIL_H.spp)
     };
-    const byKey = new Map(); // "date|sku" -> {date, sku, name, buyQ, buyS, returnQ}
+    const num = (row, i) => i >= 0 ? (parseFloat(String(row[i]).replace(',','.')) || 0) : 0;
+    const byKey = new Map(); // "date|sku" -> {date, sku, name, buyQ, buyS, kperech, returnQ, sppSum, sppN}
     let skippedNoSku = 0;
     for (let i = 1; i < fileRows.length; i++) {
       const row = fileRows[i];
       const sku = String(row[idx.sku] || '').trim();
       const date = String(row[idx.date] || '').trim();
       const reason = String(row[idx.reason] || '').trim();
-      const qty = parseFloat(row[idx.qty]) || 0;
-      const payout = parseFloat(row[idx.payout]) || 0;
+      const qty = num(row, idx.qty);
+      const payout = num(row, idx.payout);
+      // Реальная сумма продажи = розничная цена (после согласованной скидки), с фолбэком на базовую цену
+      let retail = idx.retail >= 0 ? num(row, idx.retail) : 0;
+      if (!retail) retail = num(row, idx.retailBase);
+      const spp = num(row, idx.spp);
       if (!date) continue;
       if (!sku) { skippedNoSku++; continue; } // Хранение/Удержание — общие по кабинету, не привязаны к товару
       const key = date + '|' + sku;
-      if (!byKey.has(key)) byKey.set(key, { date, sku, name: String(row[idx.name]||sku).trim(), buyQ:0, buyS:0, returnQ:0 });
+      if (!byKey.has(key)) byKey.set(key, { date, sku, name: String(row[idx.name]||sku).trim(), buyQ:0, buyS:0, kperech:0, returnQ:0, sppSum:0, sppN:0 });
       const rec = byKey.get(key);
-      if (reason === 'Продажа') { rec.buyQ += qty; rec.buyS += payout; }
-      else if (reason === 'Возврат') { rec.returnQ += qty; }
+      if (reason === 'Продажа') {
+        rec.buyQ += qty;
+        rec.buyS += (retail || payout); // сумма продаж по розничной цене; если её нет — хотя бы payout
+        rec.kperech += payout;           // фактическое «к перечислению» из отчёта
+        if (spp) { rec.sppSum += spp; rec.sppN += 1; }
+      } else if (reason === 'Возврат') {
+        rec.returnQ += qty;
+      }
     }
     return { byKey, skippedNoSku };
   }
@@ -1747,16 +1763,18 @@ const App = (() => {
       const existing = db.days.findIndex(d => d.id === id);
       const isNew = existing < 0;
       if (isNew && agg.buyQ === 0 && agg.buyS === 0 && agg.returnQ === 0) { skippedEmpty++; return; } // logистика без факта продажи/возврата в этот день — нечего писать
+      const sppAvg = agg.sppN > 0 ? Math.round(agg.sppSum / agg.sppN * 10) / 10 : 0;
       if (isNew) {
-        db.days.push({ id, date:agg.date, sku:agg.sku, ordQ:0, ordS:0, buyQ:agg.buyQ, buyS:Math.round(agg.buyS), stock:0, shows:0, clicks:0, cart:0, adsShows:0, adsClicks:0, adsSpend:0, adsOrdQ:0, adsCart:0, spp:0, giveaway:0, returnQ:agg.returnQ, storageCost:0, source:'import' });
+        db.days.push({ id, date:agg.date, sku:agg.sku, ordQ:0, ordS:0, buyQ:agg.buyQ, buyS:Math.round(agg.buyS), stock:0, shows:0, clicks:0, cart:0, adsShows:0, adsClicks:0, adsSpend:0, adsOrdQ:0, adsCart:0, spp:sppAvg, giveaway:0, returnQ:agg.returnQ, storageCost:0, source:'import' });
         added++;
       } else {
         // Мержим только то, что реально знаем из этого отчёта — остальные поля (заказы, показы, реклама) не трогаем
         const d = db.days[existing];
         d.buyQ = agg.buyQ; d.buyS = Math.round(agg.buyS); d.returnQ = agg.returnQ;
+        if (sppAvg) d.spp = sppAvg;
         updated++;
       }
-      rows.push({ date: agg.date, sku: agg.sku, name: prodByS.get(agg.sku)?.name || agg.name, ordQ: 0, buyQ: agg.buyQ, isNew });
+      rows.push({ date: agg.date, sku: agg.sku, name: prodByS.get(agg.sku)?.name || agg.name, ordQ: 0, buyQ: agg.buyQ, buyS: Math.round(agg.buyS), returnQ: agg.returnQ, isNew });
     });
     await save();
     render();
@@ -1823,7 +1841,7 @@ const App = (() => {
       const existing = db.days.findIndex(d => d.id === id);
       const isNew = existing < 0;
       if (isNew) { db.days.push(rec); added++; } else { db.days[existing] = rec; updated++; }
-      rows.push({ date, sku, name: prodByS.get(sku)?.name || sku, ordQ: rec.ordQ, buyQ: rec.buyQ, isNew });
+      rows.push({ date, sku, name: prodByS.get(sku)?.name || sku, ordQ: rec.ordQ, buyQ: rec.buyQ, buyS: rec.buyS, returnQ: rec.returnQ, isNew });
     }
     try {
       await save();
@@ -1844,13 +1862,20 @@ const App = (() => {
       <div class="day-result-stat upd"><div class="day-result-stat-num">${updated}</div><div class="day-result-stat-lbl">🔄 Обновлено (уже были)</div></div>
       <div class="day-result-stat skip"><div class="day-result-stat-num">${skipped}</div><div class="day-result-stat-lbl">⚠️ Пропущено строк</div></div>`;
     const shown = rows.slice(0, 100);
-    $('dayResultList').innerHTML = shown.map(r => `
+    $('dayResultList').innerHTML = shown.map(r => {
+      const parts = [];
+      if (r.buyQ) parts.push(`выкупы ${fmt(r.buyQ)}шт`);
+      if (r.buyS) parts.push(`${fmt(r.buyS)} ₽`);
+      if (r.returnQ) parts.push(`возвраты ${fmt(r.returnQ)}`);
+      if (!r.buyQ && r.ordQ) parts.push(`заказы ${fmt(r.ordQ)}`);
+      return `
       <div class="day-result-row">
         <span class="day-result-row-badge ${r.isNew?'new':'upd'}">${r.isNew?'НОВОЕ':'ОБНОВЛЕНО'}</span>
         <span class="day-result-row-date">${r.date}</span>
         <span class="day-result-row-sku">${esc(r.name)}</span>
-        <span class="day-result-row-meta">заказы ${fmt(r.ordQ)} · выкупы ${fmt(r.buyQ)}</span>
-      </div>`).join('') || '<div class="day-result-more">Нет строк для отображения</div>';
+        <span class="day-result-row-meta">${parts.join(' · ') || '—'}</span>
+      </div>`;
+    }).join('') || '<div class="day-result-more">Нет строк для отображения</div>';
     if (rows.length > shown.length) {
       $('dayResultList').innerHTML += `<div class="day-result-more">…и ещё ${rows.length - shown.length} строк</div>`;
     }

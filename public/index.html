@@ -7,7 +7,7 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="shortcut icon" href="/favicon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=20260720">
+<link rel="stylesheet" href="style.css?v=20260721">
 </head>
 <body>
 <div class="top">
@@ -795,7 +795,8 @@ document.addEventListener('click', e => {
     <input type="file" id="dayFileInput" accept=".csv,.xlsx,.xls" style="display:none" onchange="App.handleCsvFile(this)">
     <div class="day-upload-error" id="dayUploadError" style="display:none"></div>
     <div class="day-upload-hint">
-      <b>💡 Какой файл подходит:</b> из кабинета WB — раздел <b>«Финансовые отчёты → Детализация»</b> (в нём есть колонки «Артикул поставщика» и «Дата продажи»), либо наш CSV-шаблон.
+      <b>💡 Какой файл подходит:</b> из кабинета WB — раздел <b>«Финансовые отчёты → Детализация»</b> (колонки «Артикул поставщика» и «Дата продажи»), либо наш CSV-шаблон.<br>
+      <span style="opacity:.85">Из детализации грузятся <b>выкупы, суммы продаж, возвраты и СПП</b> по товарам. Заказы, воронка (показы/клики) и реклама — через <b>API-ключ WB</b> в Настройках (кнопка «Загрузить данные») или CSV-шаблон.</span>
     </div>
     <div class="day-upload-actions">
       <button class="btn ghost" onclick="App.downloadTemplate()">📋 Скачать шаблон CSV</button>
@@ -1051,6 +1052,6 @@ document.addEventListener('click', e => {
 
 <div class="toast" id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="app.js?v=20260720"></script>
+<script src="app.js?v=20260721"></script>
 </body>
 </html>
