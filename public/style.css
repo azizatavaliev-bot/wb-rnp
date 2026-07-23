@@ -662,6 +662,16 @@ input:focus, select:focus { outline: 2px solid var(--acc); outline-offset: 1px; 
 .day-dropzone-title { font-size: 15px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
 .day-dropzone-sub { font-size: 12px; color: var(--muted); }
 .day-upload-actions { display: flex; justify-content: center; margin-top: 16px; }
+.day-upload-hint { margin-top: 14px; font-size: 12px; color: var(--muted); line-height: 1.6; background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.day-upload-hint b { color: var(--ink); }
+.day-upload-error {
+  margin-top: 14px; border-radius: 10px; padding: 14px 16px; font-size: 13px; line-height: 1.55;
+  background: rgba(244,67,54,.08); border: 1.5px solid #ef9a9a; color: var(--ink);
+}
+.day-upload-error b { color: #c62828; }
+body.dark .day-upload-error { background: rgba(244,67,54,.12); border-color: #c62828; }
+body.dark .day-upload-error b { color: #ef9a9a; }
+.day-upload-error .due-title { font-weight: 800; font-size: 14px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
 
 /* ЭКРАН 4: результат импорта */
 .day-result-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 16px; }

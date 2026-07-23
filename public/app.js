@@ -1235,6 +1235,7 @@ const App = (() => {
     $('dayUploadScreen').style.display = '';
     $('dayManualScreen').style.display = 'none';
     $('dayResultScreen').style.display = 'none';
+    const errBox = $('dayUploadError'); if (errBox) errBox.style.display = 'none';
     $('dayModalSub').textContent = 'Загрузи Excel/CSV — данные добавятся сразу за все дни и товары из файла';
   }
   function showDayManual() {
@@ -1698,6 +1699,16 @@ const App = (() => {
     const has = label => header.some(h => String(h).trim() === label);
     return has(WB_DETAIL_H.sku) && has(WB_DETAIL_H.date) && has(WB_DETAIL_H.reason);
   }
+  // Сводный финансовый «Ежедневный отчёт» WB — одна строка на весь магазин, БЕЗ разбивки по товарам.
+  function _isWbSummaryReport(header) {
+    const has = label => header.some(h => String(h).trim() === label);
+    return has('№ отчета') && has('Итого к оплате') && has('К перечислению за товар') && !has(WB_DETAIL_H.sku);
+  }
+  function _showUploadError(html) {
+    const box = $('dayUploadError');
+    if (box) { box.innerHTML = html; box.style.display = ''; }
+    else toast('❌ Файл не подходит'); // fallback
+  }
   function _parseWbDetailReport(fileRows) {
     const header = fileRows[0];
     const idxOf = label => header.findIndex(h => String(h).trim() === label);
@@ -1755,10 +1766,11 @@ const App = (() => {
 
   async function handleCsvFile(input) {
     const file = input.files[0]; if (!file) return;
+    const errBox = $('dayUploadError'); if (errBox) errBox.style.display = 'none'; // сброс прошлой ошибки
     let fileRows;
     try { fileRows = await readFileRows(file); }
-    catch (err) { toast('❌ ' + err.message); input.value=''; return; }
-    if (fileRows.length < 2) { toast('Файл пустой или неверный формат'); input.value=''; return; }
+    catch (err) { _showUploadError(`<div class="due-title">⚠️ Не удалось прочитать файл</div>${esc(err.message)}`); input.value=''; return; }
+    if (fileRows.length < 2) { _showUploadError('<div class="due-title">⚠️ Файл пустой</div>В файле нет строк с данными.'); input.value=''; return; }
     // определяем заголовок
     const header = fileRows[0];
     // Официальный отчёт WB «Детализация» — свой формат, свой парсер
@@ -1767,6 +1779,17 @@ const App = (() => {
       catch (e) { toast('Ошибка сохранения: ' + e.message); }
       input.value = '';
       return;
+    }
+    // Сводный финансовый «Ежедневный отчёт» — нет разбивки по товарам, объясняем понятно
+    if (_isWbSummaryReport(header)) {
+      _showUploadError(
+        '<div class="due-title">📄 Это сводный финансовый отчёт</div>' +
+        'Ты загрузил <b>«Ежедневный отчёт»</b> — это итог по всему магазину за период (общая продажа, логистика, хранение). ' +
+        'В нём <b>нет разбивки по товарам</b>, поэтому загрузить его по дням/SKU нельзя.<br><br>' +
+        '✅ <b>Нужен другой файл:</b> в кабинете WB открой <b>«Финансовые отчёты → Детализация»</b> и скачай отчёт с колонками ' +
+        '<b>«Артикул поставщика»</b> и <b>«Дата продажи»</b> — вот его загружай сюда.'
+      );
+      input.value=''; return;
     }
     // поддерживаем и английские ключи (date,sku,...) и русские метки из шаблона
     const idxOf = key => {
@@ -1777,7 +1800,14 @@ const App = (() => {
     };
     const idx = {};
     CSV_COLS.forEach(c => { idx[c] = idxOf(c); });
-    if (idx.date < 0 || idx.sku < 0) { toast('Нет колонок «Дата» и «SKU товара» в файле — используй наш шаблон'); input.value=''; return; }
+    if (idx.date < 0 || idx.sku < 0) {
+      _showUploadError(
+        '<div class="due-title">⚠️ Не нашёл нужные колонки</div>' +
+        'В файле нет колонок <b>«Дата»</b> и <b>«SKU товара»</b>, поэтому непонятно, к какому товару и дню относятся данные.<br><br>' +
+        '✅ Используй наш <b>CSV-шаблон</b> (кнопка ниже) или <b>детализированный отчёт WB</b> с колонками «Артикул поставщика» и «Дата продажи».'
+      );
+      input.value=''; return;
+    }
 
     let added = 0, updated = 0, skipped = 0;
     const rows = []; // для экрана результата: {date, sku, name, ordQ, buyQ, isNew}
